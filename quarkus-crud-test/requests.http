@@ -1,0 +1,67 @@
+@host = http://localhost:8080
+@userId = 695950b6e4b6d520edd6cef3
+
+GET {{host}}/users/teste
+###
+
+GET {{host}}/users
+
+###
+GET {{host}}/users/{{userId}}
+
+###
+# Criar um novo usuário
+POST {{host}}/users
+Content-Type: application/json
+
+{
+  "name": "Jane",
+  "surname": "Doe",
+  "email": "jane.doe@example.com",
+  "nickname": "janedoe",
+  "password": "complexpassword456",
+  "addresses": [
+    {
+      "street": "456 Oak Ave",
+      "city": "Otherville",
+      "state": "NY",
+      "zipCode": "10001"
+    }
+  ]
+}
+
+###
+# Atualizar um usuário existente (usando o ID que será retornado na criação)
+# NOTA: Substitua {{userId}} pelo ID real do usuário que você acabou de criar.
+# Você pode copiar o ID retornado pela requisição POST acima.
+PUT {{host}}/users/{{userId}}
+Content-Type: application/json
+
+{
+  "name": "Jane",
+  "surname": "Doe Updated",
+  "email": "jane.doe.updated@example.com",
+  "nickname": "janedoe_upd",
+  "password": "newsecurepassword789",
+  "addresses": [
+    {
+      "street": "456 Oak Ave",
+      "city": "Otherville",
+      "state": "NY",
+      "zipCode": "10001"
+    },
+    {
+      "street": "789 Pine Ln",
+      "city": "Newville",
+      "state": "NY",
+      "zipCode": "10002"
+    }
+  ]
+}
+
+###
+# Excluir um usuário (usando o ID do usuário)
+# NOTA: Substitua {{userId}} pelo ID real do usuário que você deseja excluir.
+DELETE {{host}}/users/{{userId}}
+
+###

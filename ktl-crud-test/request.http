@@ -1,0 +1,72 @@
+@host = http://localhost:8080
+
+
+GET {{host}}/test-mongo HTTP/1.1
+
+### User CRUD Endpoints
+
+# Base URL variable
+
+# Create a new user
+# @name createUser
+POST {{host}}/users
+Content-Type: application/json
+
+{
+  "name": "Vini",
+  "surname": "0410",
+  "nickname": "vini0410",
+  "password": "securepassword123",
+  "addresses": [
+    {
+      "code": "88054340",
+      "street": "Rua B",
+      "number": "9978",
+      "complement": "Apt 1"
+    }
+  ]
+}
+
+###
+
+# Get all users
+GET {{host}}/users
+
+###
+
+# --- After creating a user, copy the ID from the response of the createUser request and paste it below ---
+@userId = 6952c1d20915ea566c0f191b
+
+# Get a single user by ID
+GET {{host}}/users/{{userId}}
+
+###
+
+# Get a single user by ID with addresses
+GET {{host}}/users/{{userId}}/addresses
+
+###
+
+# Update a user by ID
+PUT {{host}}/users/{{userId}}
+Content-Type: application/json
+
+{
+  "name": "John",
+  "surname": "Doe Updated",
+  "nickname": "johndoe_updated",
+  "password": "newpassword456",
+  "addresses": [
+    {
+      "code": "12345-678",
+      "street": "Main Street Updated",
+      "number": "101",
+      "complement": "Apt 2"
+    }
+  ]
+}
+
+###
+
+# Delete a user by ID
+DELETE {{host}}/users/{{userId}}
