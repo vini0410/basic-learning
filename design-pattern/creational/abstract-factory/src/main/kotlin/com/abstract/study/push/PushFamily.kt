@@ -20,7 +20,7 @@ class PushLogger : ErrorLogger {
     }
 }
 
-class PushFactory : NotificationFactory {
+object PushFactory : NotificationFactory {
     override fun createSender(): Sender = PushSender()
     override fun createFormatter(): TemplateFormatter = PushFormatter()
     override fun createLogger(): ErrorLogger = PushLogger()

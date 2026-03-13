@@ -20,7 +20,7 @@ class SmsLogger : ErrorLogger {
     }
 }
 
-class SmsFactory : NotificationFactory {
+object SmsFactory : NotificationFactory {
     override fun createSender(): Sender = SmsSender()
     override fun createFormatter(): TemplateFormatter = SmsFormatter()
     override fun createLogger(): ErrorLogger = SmsLogger()

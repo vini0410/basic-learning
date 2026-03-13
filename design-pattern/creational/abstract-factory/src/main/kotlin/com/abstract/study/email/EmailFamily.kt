@@ -20,7 +20,7 @@ class EmailLogger : ErrorLogger {
     }
 }
 
-class EmailFactory : NotificationFactory {
+object EmailFactory : NotificationFactory {
     override fun createSender(): Sender = EmailSender()
     override fun createFormatter(): TemplateFormatter = EmailFormatter()
     override fun createLogger(): ErrorLogger = EmailLogger()

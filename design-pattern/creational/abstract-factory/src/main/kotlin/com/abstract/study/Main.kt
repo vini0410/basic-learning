@@ -1,7 +1,11 @@
 package com.abstract.study
 
+import com.abstract.study.email.EmailFactory
+import com.abstract.study.models.ChannelType
 import com.abstract.study.models.NotificationRequest
+import com.abstract.study.push.PushFactory
 import com.abstract.study.service.NotificationService
+import com.abstract.study.sms.SmsFactory
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
 import io.ktor.server.engine.*
@@ -12,7 +16,14 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 fun main() {
-    val service = NotificationService()
+    // Configuração das fábricas (Injeção de Dependência Manual)
+    val notificationFactories = mapOf(
+        ChannelType.EMAIL to EmailFactory,
+        ChannelType.SMS to SmsFactory,
+        ChannelType.PUSH to PushFactory
+    )
+    
+    val service = NotificationService(notificationFactories)
 
     embeddedServer(Netty, port = 8080) {
         install(ContentNegotiation) {

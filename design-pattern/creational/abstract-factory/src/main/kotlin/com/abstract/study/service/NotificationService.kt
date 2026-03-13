@@ -10,15 +10,14 @@ import com.abstract.study.sms.SmsFactory
 
 import java.time.LocalDateTime
 
-class NotificationService {
+class NotificationService(
+    private val factories: Map<ChannelType, NotificationFactory>
+) {
 
     fun sendNotification(request: NotificationRequest): NotificationResult {
-        // Seleção da Fábrica Baseada no Tipo (Mapping)
-        val factory: NotificationFactory = when (request.channelType) {
-            ChannelType.EMAIL -> EmailFactory()
-            ChannelType.SMS -> SmsFactory()
-            ChannelType.PUSH -> PushFactory()
-        }
+        // Seleção da Fábrica de forma desacoplada
+        val factory = factories[request.channelType] 
+            ?: throw IllegalArgumentException("Fábrica para o canal ${request.channelType} não registrada.")
 
         // Utilização da Fábrica para criar os produtos da família
         val formatter = factory.createFormatter()
@@ -30,15 +29,15 @@ class NotificationService {
             sender.send(formattedMessage)
             NotificationResult(
                 success = true, 
-                message = "Notificação enviada via ${request.channelType}",
-                timestamp = LocalDateTime.now().toString()
+                message = "Notificação enviada com sucesso via ${request.channelType}",
+                timestamp = java.time.LocalDateTime.now().toString()
             )
         } catch (e: Exception) {
             logger.log(e.message ?: "Erro desconhecido")
             NotificationResult(
                 success = false, 
                 message = "Falha ao enviar via ${request.channelType}: ${e.message}",
-                timestamp = LocalDateTime.now().toString()
+                timestamp = java.time.LocalDateTime.now().toString()
             )
         }
     }
