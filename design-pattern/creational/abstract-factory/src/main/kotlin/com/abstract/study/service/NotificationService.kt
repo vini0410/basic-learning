@@ -1,0 +1,45 @@
+package com.abstract.study.service
+
+import com.abstract.study.email.EmailFactory
+import com.abstract.study.interfaces.NotificationFactory
+import com.abstract.study.models.ChannelType
+import com.abstract.study.models.NotificationRequest
+import com.abstract.study.models.NotificationResult
+import com.abstract.study.push.PushFactory
+import com.abstract.study.sms.SmsFactory
+
+import java.time.LocalDateTime
+
+class NotificationService {
+
+    fun sendNotification(request: NotificationRequest): NotificationResult {
+        // Seleção da Fábrica Baseada no Tipo (Mapping)
+        val factory: NotificationFactory = when (request.channelType) {
+            ChannelType.EMAIL -> EmailFactory()
+            ChannelType.SMS -> SmsFactory()
+            ChannelType.PUSH -> PushFactory()
+        }
+
+        // Utilização da Fábrica para criar os produtos da família
+        val formatter = factory.createFormatter()
+        val sender = factory.createSender()
+        val logger = factory.createLogger()
+
+        return try {
+            val formattedMessage = formatter.format(request.content)
+            sender.send(formattedMessage)
+            NotificationResult(
+                success = true, 
+                message = "Notificação enviada via ${request.channelType}",
+                timestamp = LocalDateTime.now().toString()
+            )
+        } catch (e: Exception) {
+            logger.log(e.message ?: "Erro desconhecido")
+            NotificationResult(
+                success = false, 
+                message = "Falha ao enviar via ${request.channelType}: ${e.message}",
+                timestamp = LocalDateTime.now().toString()
+            )
+        }
+    }
+}
