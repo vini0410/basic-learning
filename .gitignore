@@ -1,2 +1,13 @@
 */.idea
 */.gradle
+*/build
+*/.DS_Store
+*/.vscode
+*/.settings
+*/.project
+*/.classpath
+*/.factorypath
+*/.externalToolBuilders
+*/.cproject
+*/.settings/
+*/.metadata/
