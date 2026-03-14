@@ -10,7 +10,7 @@ class NotificationFactoryTest {
 
     @Test
     fun `EmailFactory deve criar produtos da familia Email`() {
-        val factory = EmailFactory()
+        val factory = EmailFactory
         
         assertTrue(factory.createSender() is EmailSender)
         assertTrue(factory.createFormatter() is EmailFormatter)
@@ -19,7 +19,7 @@ class NotificationFactoryTest {
 
     @Test
     fun `SmsFactory deve criar produtos da familia SMS`() {
-        val factory = SmsFactory()
+        val factory = SmsFactory
         
         assertTrue(factory.createSender() is SmsSender)
         assertTrue(factory.createFormatter() is SmsFormatter)
@@ -28,7 +28,7 @@ class NotificationFactoryTest {
 
     @Test
     fun `PushFactory deve criar produtos da familia Push`() {
-        val factory = PushFactory()
+        val factory = PushFactory
         
         assertTrue(factory.createSender() is PushSender)
         assertTrue(factory.createFormatter() is PushFormatter)

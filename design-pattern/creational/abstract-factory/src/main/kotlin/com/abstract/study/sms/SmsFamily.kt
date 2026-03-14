@@ -1,10 +1,13 @@
 package com.abstract.study.sms
 
 import com.abstract.study.interfaces.*
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("SmsService")
 
 class SmsSender : Sender {
     override fun send(message: String) {
-        println("Enviando SMS: $message")
+        logger.info("Enviando SMS: {}", message)
     }
 }
 
@@ -16,7 +19,7 @@ class SmsFormatter : TemplateFormatter {
 
 class SmsLogger : ErrorLogger {
     override fun log(error: String) {
-        println("[SMS ERROR LOG]: $error")
+        logger.error("[SMS ERROR LOG]: {}", error)
     }
 }
 

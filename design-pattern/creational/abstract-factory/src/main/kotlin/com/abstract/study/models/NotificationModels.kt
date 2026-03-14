@@ -1,7 +1,6 @@
 package com.abstract.study.models
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Contextual
 import java.time.LocalDateTime
 
 @Serializable
@@ -13,12 +12,19 @@ enum class ChannelType {
 data class NotificationRequest(
     val recipient: String,
     val content: String,
-    val channelType: ChannelType
+    val channelType: String
 )
 
 @Serializable
 data class NotificationResult(
     val success: Boolean,
     val message: String,
-    val timestamp: String // Simplified for serialization without custom serializers
+    val timestamp: String
+)
+
+@Serializable
+data class ErrorResponse(
+    val errorCode: String,
+    val message: String,
+    val timestamp: String = LocalDateTime.now().toString()
 )

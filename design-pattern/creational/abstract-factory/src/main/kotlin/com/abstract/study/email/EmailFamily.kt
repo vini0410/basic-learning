@@ -1,10 +1,13 @@
 package com.abstract.study.email
 
 import com.abstract.study.interfaces.*
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("EmailService")
 
 class EmailSender : Sender {
     override fun send(message: String) {
-        println("Enviando Email: $message")
+        logger.info("Enviando Email: {}", message)
     }
 }
 
@@ -16,7 +19,7 @@ class EmailFormatter : TemplateFormatter {
 
 class EmailLogger : ErrorLogger {
     override fun log(error: String) {
-        println("[EMAIL ERROR LOG]: $error")
+        logger.error("[EMAIL ERROR LOG]: {}", error)
     }
 }
 

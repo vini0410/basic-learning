@@ -1,10 +1,13 @@
 package com.abstract.study.push
 
 import com.abstract.study.interfaces.*
+import org.slf4j.LoggerFactory
+
+private val logger = LoggerFactory.getLogger("PushService")
 
 class PushSender : Sender {
     override fun send(message: String) {
-        println("Enviando Push Notification: $message")
+        logger.info("Enviando Push Notification: {}", message)
     }
 }
 
@@ -16,7 +19,7 @@ class PushFormatter : TemplateFormatter {
 
 class PushLogger : ErrorLogger {
     override fun log(error: String) {
-        println("[PUSH ERROR LOG]: $error")
+        logger.error("[PUSH ERROR LOG]: {}", error)
     }
 }
 
