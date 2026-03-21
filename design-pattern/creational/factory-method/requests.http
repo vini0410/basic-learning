@@ -1,0 +1,35 @@
+### Process Stripe Payment
+POST http://localhost:8080/pay
+Content-Type: application/json
+
+{
+  "method": "STRIPE",
+  "amount": 100.0
+}
+
+### Process PayPal Payment
+POST http://localhost:8080/pay
+Content-Type: application/json
+
+{
+  "method": "PAYPAL",
+  "amount": 250.0
+}
+
+### Process Cielo Payment
+POST http://localhost:8080/pay
+Content-Type: application/json
+
+{
+  "method": "CIELO",
+  "amount": 50.5
+}
+
+### Process Unsupported Payment
+POST http://localhost:8080/pay
+Content-Type: application/json
+
+{
+  "method": "BITCOIN",
+  "amount": 1.0
+}
