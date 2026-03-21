@@ -1,0 +1,80 @@
+### API de Relatórios Dinâmicos (Padrão Builder)
+
+### 1. Root Check
+GET http://0.0.0.0:8081/
+
+### 2. Relatório Completo (Todos os campos) - 200 OK
+# Demonstra o Builder recebendo e processando filtros, ordenação e limites.
+POST http://0.0.0.0:8081/report/generate
+Content-Type: application/json
+
+{
+  "reportName": "Relatório Anual de Vendas - 2025",
+  "format": "csv",
+  "filterBy": "active",
+  "filterValue": "true",
+  "sortBy": "valor_total",
+  "limit": 100
+}
+
+### 3. Relatório Minimalista - 200 OK
+POST http://0.0.0.0:8081/report/generate
+Content-Type: application/json
+
+{
+  "reportName": "Relatório Rápido",
+  "format": "pdf"
+}
+
+### 4. Erro: Formato Inválido (Capturado pelo Handler) - 400 Bad Request
+# O endpoint agora lança ReportBuilderException ao receber um formato desconhecido.
+POST http://0.0.0.0:8081/report/generate
+Content-Type: application/json
+
+{
+  "reportName": "Relatório com Formato Errado",
+  "format": "super_document"
+}
+
+### 5. Erro: Título Vazio (Validação no setTitle) - 422 Unprocessable Entity
+# O Builder valida se o título é branco logo ao tentar setá-lo.
+POST http://0.0.0.0:8081/report/generate
+Content-Type: application/json
+
+{
+  "reportName": " ",
+  "format": "pdf"
+}
+
+### 6. Erro: Paginação Inválida (Validação no setItemsPerPage) - 422 Unprocessable Entity
+# O Builder valida se o limite está entre 1 e 1000.
+POST http://0.0.0.0:8081/report/generate
+Content-Type: application/json
+
+{
+  "reportName": "Relatório com Limite Grande",
+  "format": "pdf",
+  "limit": 5000
+}
+
+### 7. Erro: Filtro com Campo Vazio (Validação no addFilter) - 422 Unprocessable Entity
+# O Builder valida se o campo do filtro foi informado.
+POST http://0.0.0.0:8081/report/generate
+Content-Type: application/json
+
+{
+  "reportName": "Relatório Filtro Inválido",
+  "format": "json",
+  "filterBy": ""
+}
+
+### 9. Erro: Validação Cruzada (CSV com Limite Alto) - 422 Unprocessable Entity
+# O Builder valida que para formato CSV, o limite não pode passar de 100.
+POST http://0.0.0.0:8081/report/generate
+Content-Type: application/json
+
+{
+  "reportName": "Relatório CSV Gigante",
+  "format": "csv",
+  "limit": 500
+}
