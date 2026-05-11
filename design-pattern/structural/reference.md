@@ -32,3 +32,6 @@ Um objeto que transporta dados entre processos para reduzir o número de chamada
 
 ## 2. Extension Object
 Permite que o comportamento de um objeto seja estendido sem alterar sua classe original, através da adição de "interfaces de extensão". É útil em sistemas altamente dinâmicos.
+
+## 3. Registry
+Fornece um ponto centralizado para armazenar e recuperar objetos ou serviços de uso comum na aplicação. Ele atua como um repositório global que desacopla a criação do objeto de seu uso, permitindo que diferentes partes do sistema acessem instâncias compartilhadas sem a necessidade de passar referências manualmente.

@@ -1,8 +1,5 @@
 package com.factory.study.service
 
-import com.factory.study.creators.CieloCreator
-import com.factory.study.creators.PayPalCreator
-import com.factory.study.creators.StripeCreator
 import com.factory.study.models.PaymentMethod
 import com.factory.study.models.PaymentRequest
 import kotlin.test.Test
@@ -10,12 +7,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class PaymentServiceTest {
-    private val creators = mapOf(
-        PaymentMethod.STRIPE to StripeCreator(),
-        PaymentMethod.PAYPAL to PayPalCreator(),
-        PaymentMethod.CIELO to CieloCreator()
-    )
-    private val service = PaymentService(creators)
+    private val service = PaymentService()
 
     @Test
     fun `should process Stripe payment`() {

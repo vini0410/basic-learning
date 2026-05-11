@@ -48,3 +48,8 @@ Estes projetos focam na composição de classes e objetos para formar estruturas
 ### 2. Extension Object
 **Projeto:** Sistema de Plugins para um CMS.
 - **Descrição:** Permitir que funcionalidades extras sejam "anexadas" a um objeto `Post` sem alterar sua classe (ex: plugin de SEO, plugin de comentários).
+
+### 3. Registry
+**Projeto:** Central de Serviços de Infraestrutura (Service Registry).
+- **Descrição:** Criar um repositório central que gerencia instâncias de `Logger`, `DatabaseConnector` e `CacheProvider`. O sistema deve permitir registrar e recuperar serviços dinamicamente.
+- **Objetivo:** Centralizar o acesso a serviços compartilhados e facilitar a substituição de implementações em ambientes de teste (ex: trocar Database real por um Mock).

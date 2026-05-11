@@ -1,0 +1,59 @@
+{
+  "id": null,
+  "uid": "clearing-dashboard",
+  "title": "Clearing - Key Metrics",
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "version": 1,
+  "refresh": "15s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Process CPU Usage",
+      "gridPos": {"x": 0, "y": 0, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "process_cpu_usage", "legendFormat": "cpu"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Heap %",
+      "gridPos": {"x": 12, "y": 0, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "(sum(jvm_memory_used_bytes{area=\"heap\"}) / sum(jvm_memory_max_bytes{area=\"heap\"}))*100", "legendFormat": "heap %"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "JVM Threads Live",
+      "gridPos": {"x": 0, "y": 6, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "jvm_threads_live", "legendFormat": "threads"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Req/s - /accounts/transfer (1m)",
+      "gridPos": {"x": 12, "y": 6, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "increase(http_server_requests_seconds_count{uri=\"/accounts/transfer\"}[1m])", "legendFormat": "req/s"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency (avg) - /accounts/transfer (5m)",
+      "gridPos": {"x": 0, "y": 12, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "rate(http_server_requests_seconds_sum{uri=\"/accounts/transfer\"}[5m]) / rate(http_server_requests_seconds_count{uri=\"/accounts/transfer\"}[5m])", "legendFormat": "avg latency"}
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Hikari Active Connections",
+      "gridPos": {"x": 12, "y": 12, "w": 12, "h": 6},
+      "targets": [
+        {"expr": "hikaricp_connections_active{pool=\"HikariPoolClearing\"}", "legendFormat": "active"}
+      ]
+    }
+  ]
+}

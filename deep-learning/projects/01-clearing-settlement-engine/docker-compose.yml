@@ -1,0 +1,129 @@
+services:
+
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    networks:
+      - clearing-network
+    ports:
+      - "5050:80"
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: clearing-postgres
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: clearing
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    volumes:
+      - ~/docker/clearing-settlement-engine/postgres/data:/var/lib/postgresql/data
+    networks:
+      - clearing-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d clearing"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: clearing-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - clearing-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: clearing-zookeeper
+    restart: always
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - clearing-network
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: clearing-kafka
+    restart: always
+    depends_on:
+      zookeeper:
+        condition: service_started
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT_INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    networks:
+      - clearing-network
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  app:
+    image: clearing-settlement-engine-app:latest
+    container_name: clearing-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      - SPRING_PROFILES_ACTIVE=local
+    depends_on:
+      - postgres
+      - kafka
+      - redis
+    networks:
+      - clearing-network
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: clearing-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    networks:
+      - clearing-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: clearing-grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    networks:
+      - clearing-network
+
+volumes:
+  grafana-storage:
+
+networks:
+  clearing-network:
+    driver: bridge
