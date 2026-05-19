@@ -1,3 +1,18 @@
 spring:
   application:
     name: notification-app
+  rabbitmq:
+    name: my-queue
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    listener:
+      simple:
+        acknowledge-mode: manual        # manual ack = safer, no silent message loss
+        prefetch: 10                    # how many unacked msgs per consumer at once
+        retry:
+          enabled: true
+          initial-interval: 1000ms
+          multiplier: 2.0
+          max-retries: 3
