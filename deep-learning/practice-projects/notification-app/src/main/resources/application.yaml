@@ -16,3 +16,15 @@ spring:
           initial-interval: 1000ms
           multiplier: 2.0
           max-retries: 3
+
+  mail:
+    host: ://gmail.com
+    port: 587
+    username: your-email@gmail.com
+    password: your-app-password
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true

@@ -1,4 +1,4 @@
-package com.notification.notificationapp.integration.income.queue
+package com.notification.notificationapp.integration.income.queue.config
 
 import org.springframework.amqp.support.converter.JacksonJsonMessageConverter
 import org.springframework.amqp.support.converter.MessageConverter
