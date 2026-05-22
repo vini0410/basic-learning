@@ -16,7 +16,7 @@ class Listener(
 
     private val logger = LoggerFactory.getLogger(javaClass)
 
-    @RabbitListener(queues = [$$"${spring.rabbitmq.name}"])
+    @RabbitListener(queues = [$$"${app.queue.name}"])
     fun listener(
         message: NotificationMessage,
         channel: Channel,

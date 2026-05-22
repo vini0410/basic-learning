@@ -1,7 +1,7 @@
 package com.notification.notificationapp.core.processor.impl
 
 import com.notification.notificationapp.core.processor.NotificationProcessor
-import com.notification.notificationapp.core.usecase.EmailUseCase
+import com.notification.notificationapp.core.usecase.impl.EmailUseCase
 import org.springframework.stereotype.Component
 
 @Component
@@ -12,8 +12,6 @@ class EmailProcessor(
     override val type = "EMAIL"
 
     override fun process(metadata: Map<String, Any>, message: String) {
-        useCase.sendMessage(metadata, message)
+        useCase.sendNotification(metadata, message)
     }
-
-
 }
