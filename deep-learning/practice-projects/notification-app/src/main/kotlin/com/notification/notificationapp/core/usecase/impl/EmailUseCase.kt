@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component
 class EmailUseCase(
     private val integration: SendEmail
 ) : NotificationUseCase {
+
     private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun sendNotification(metadata: Map<String, Any>, message: String) {

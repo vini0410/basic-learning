@@ -14,6 +14,7 @@ class WhatsAppUseCase(
     @Value($$"${meta.whatsapp.token}") private val token: String,
     @Value($$"${meta.whatsapp.number-id}") private val phoneNumberId: String
 ) : NotificationUseCase {
+
     private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun sendNotification(metadata: Map<String, Any>, message: String) {

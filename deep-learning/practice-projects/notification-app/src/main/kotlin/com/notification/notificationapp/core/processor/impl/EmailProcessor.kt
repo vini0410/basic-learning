@@ -6,10 +6,8 @@ import org.springframework.stereotype.Component
 
 @Component
 class EmailProcessor(
-    private val useCase: EmailUseCase,
+    private val useCase: EmailUseCase, override val type: String = "EMAIL"
 ) : NotificationProcessor {
-
-    override val type = "EMAIL"
 
     override fun process(metadata: Map<String, Any>, message: String) {
         useCase.sendNotification(metadata, message)

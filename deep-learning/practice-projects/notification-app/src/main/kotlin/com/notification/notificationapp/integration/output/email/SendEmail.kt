@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component
 class SendEmail(
     private val sender: JavaMailSender
 ) {
+
     private val logger = LoggerFactory.getLogger(javaClass)
 
     fun sendEmail(targetEmail: String, subject: String, body: String) {
