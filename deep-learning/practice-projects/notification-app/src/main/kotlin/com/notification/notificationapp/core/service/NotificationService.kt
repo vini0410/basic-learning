@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service
 
 @Service
 class NotificationService(processors: List<NotificationProcessor>) {
+
     private val processorMap = processors.associateBy { it.type }
 
     fun process(type: String, metadata: Map<String, Any>, message: String) {

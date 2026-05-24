@@ -34,8 +34,15 @@ spring:
 
 meta:
   whatsapp:
-    token: ${WHATSAPP_TOKEN}
-    number-id: ${WHATSAPP_NUMBER_ID}
+    token: ${WHATSAPP_TOKEN:token}
+    number-id: ${WHATSAPP_NUMBER_ID:number-id}
+
+twilio:
+  sms:
+    accountSid: ${TWILIO_ACCOUNT_SID}
+    authToken: ${TWILIO_AUTH_TOKEN}
+    phone-number: ${TWILIO_PHONE_NUMBER}
+
 
 # Facilita a visualização do tráfego do RabbitMQ e da sua aplicação
 logging:
