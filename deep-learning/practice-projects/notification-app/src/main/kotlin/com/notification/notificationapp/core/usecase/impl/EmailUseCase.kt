@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component
 @Component
 class EmailUseCase(
     private val integration: SendEmail
-): NotificationUseCase {
+) : NotificationUseCase {
     private val logger = LoggerFactory.getLogger(javaClass)
 
     override fun sendNotification(metadata: Map<String, Any>, message: String) {
@@ -17,6 +17,11 @@ class EmailUseCase(
         val target = metadata["target"] ?: throw RuntimeException("target Email missing")
         val subject = metadata["subject"] ?: throw RuntimeException("subject Email missing")
 
-        integration.sendEmail(target.toString(), subject.toString(), message)
+        try {
+            integration.sendEmail(target.toString(), subject.toString(), message)
+        } catch (e: Exception) {
+            logger.error("Error while sending email", e)
+            throw RuntimeException("Error sending email")
+        }
     }
 }

@@ -32,6 +32,11 @@ spring:
           starttls:
             enable: true
 
+meta:
+  whatsapp:
+    token: ${WHATSAPP_TOKEN}
+    number-id: ${WHATSAPP_NUMBER_ID}
+
 # Facilita a visualização do tráfego do RabbitMQ e da sua aplicação
 logging:
   level:

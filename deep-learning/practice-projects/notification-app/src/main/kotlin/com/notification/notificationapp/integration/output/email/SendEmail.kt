@@ -19,11 +19,7 @@ class SendEmail(
             setSubject(subject)
             text = body
         }
-        try {
-            sender.send(mailMessage)
-        } catch (e: Exception) {
-            logger.error("Error while sending email", e)
-            throw RuntimeException("Error sending email")
-        }
+
+        sender.send(mailMessage)
     }
 }

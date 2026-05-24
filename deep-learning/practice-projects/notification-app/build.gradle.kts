@@ -26,6 +26,7 @@ dependencies {
     implementation("tools.jackson.module:jackson-module-kotlin")
     implementation("tools.jackson.core:jackson-databind:3.0.0")
     implementation("org.springframework.boot:spring-boot-starter-mail")
+    implementation("org.springframework.cloud:spring-cloud-starter-openfeign:5.0.1")
     developmentOnly("org.springframework.boot:spring-boot-devtools")
     testImplementation("org.springframework.boot:spring-boot-starter-amqp-test")
     testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
