@@ -16,7 +16,7 @@ class SendSms(
     fun sendSMS(phoneNumberTo: String, body: String) {
         logger.info("Sending SMS to '{}'", phoneNumberTo)
         logger.info("Sending SMS with body: '{}'", body)
-        val message = Message.creator(
+        Message.creator(
             PhoneNumber(phoneNumberTo),
             PhoneNumber(phoneNumberFrom),
             body

@@ -10,6 +10,6 @@ class WhatsAppProcessor(
 ) : NotificationProcessor {
 
     override fun process(metadata: Map<String, Any>, message: String) {
-        useCase.sendNotification(metadata, message)
+        useCase.sendNotificationWithTwilio(metadata, message)
     }
 }

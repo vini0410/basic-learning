@@ -2,6 +2,7 @@ package com.notification.notificationapp.integration.income.controller
 
 import com.notification.notificationapp.core.service.NotificationService
 import com.notification.notificationapp.integration.income.NotificationMessage
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
@@ -14,8 +15,8 @@ class NotificationController(
 ) {
 
     @PostMapping
-    fun notify(@RequestBody payload: NotificationMessage): String {
+    fun notify(@RequestBody payload: NotificationMessage): ResponseEntity<String> {
         service.process(payload.type, payload.metadata, payload.message)
-        return "Sended!!!"
+        return ResponseEntity.ok("Sended!!!")
     }
 }

@@ -4,12 +4,14 @@ import com.notification.notificationapp.core.model.WhatsAppBody
 import com.notification.notificationapp.core.model.WhatsAppMessageModel
 import com.notification.notificationapp.core.usecase.NotificationUseCase
 import com.notification.notificationapp.integration.output.whatsapp.SendWhatsApp
+import com.notification.notificationapp.integration.output.whatsapp.SendWhatsAppTwilio
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
 
 @Component
 class WhatsAppUseCase(
+    private val twilioIntegration: SendWhatsAppTwilio,
     private val integration: SendWhatsApp,
     @Value($$"${meta.whatsapp.token}") private val token: String,
     @Value($$"${meta.whatsapp.number-id}") private val phoneNumberId: String
@@ -31,5 +33,19 @@ class WhatsAppUseCase(
             logger.error("Error while sending whatsApp message", e)
             throw RuntimeException("Error sending whatsApp message", e)
         }
+    }
+
+    fun sendNotificationWithTwilio(metadata: Map<String,Any>, message: String) {
+        logger.info("useCase twilio: received: '{}' -- '{}'", metadata, message)
+
+        val target = metadata["target"] ?: throw RuntimeException("target WhatsApp number missing")
+
+        try {
+            twilioIntegration.sendMessage(target.toString(), message)
+        } catch (e: Exception) {
+            logger.error("Error while sending twilio whatsApp message", e)
+            throw RuntimeException("Error sending twilio whatsApp message", e)
+        }
+
     }
 }
