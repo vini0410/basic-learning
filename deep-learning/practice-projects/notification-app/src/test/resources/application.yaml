@@ -1,0 +1,53 @@
+app:
+  queue:
+    name: my-queue
+
+spring:
+  application:
+    name: notification-app
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: guest
+    password: guest
+    listener:
+      simple:
+        acknowledge-mode: manual        # manual ack = safer, no silent message loss
+        prefetch: 10                    # how many unacked msgs per consumer at once
+        retry:
+          enabled: true
+          initial-interval: 1000ms
+          multiplier: 2.0
+          max-retries: 3
+
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${EMAIL_ADDRESS:email}
+    password: ${EMAIL_PASSWORD:password}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+meta:
+  whatsapp:
+    token: ${WHATSAPP_TOKEN:token}
+    number-id: ${WHATSAPP_NUMBER_ID:number-id}
+
+twilio:
+  sms:
+    accountSid: ${TWILIO_ACCOUNT_SID:1234}
+    authToken: ${TWILIO_AUTH_TOKEN:1234}
+    phone-number: ${TWILIO_PHONE_NUMBER:1234}
+
+
+# Facilita a visualização do tráfego do RabbitMQ e da sua aplicação
+logging:
+  level:
+    root: INFO
+    com.notification.notificationapp: DEBUG
+    org.springframework.amqp: INFO
+    org.springframework.mail: INFO
