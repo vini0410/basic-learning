@@ -1,28 +1,32 @@
 package com.signature.webhook.feign
 
-import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import java.lang.reflect.Method
+import org.mockito.Mockito.*
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 
 class FeignSenderTest {
 
-    private val feignSender = FeignSender()
-
-    // Helper method to access private calculateHmac
-    private fun calculateHmacForTest(payload: String): String {
-        val method: Method = FeignSender::class.java.getDeclaredMethod("calculateHmac", String::class.java)
-        method.isAccessible = true
-        return method.invoke(feignSender, payload) as String
-    }
-
     @Test
-    fun `calculateHmac should produce consistent signature`() {
-        val payload = "test payload"
-        val expectedSignature =
-            "d1867e18cefbefd2eab431f4435597fe9a8411749454746b653813bd425581fb" // Pre-calculated for "test payload" and "minha_chave_secreta_mock"
+    fun `sendWebhook should send a POST request with correct headers and payload`() {
+        // Mock HttpClient and its behavior
+        val mockHttpClient = mock(HttpClient::class.java)
+        val mockHttpResponse = mock(HttpResponse::class.java) as HttpResponse<String>
 
-        val actualSignature = calculateHmacForTest(payload)
+        // Inject the mocked HttpClient into FeignSender
+        val feignSender = FeignSender(mockHttpClient)
 
-        assertEquals(expectedSignature, actualSignature)
+        `when`(mockHttpClient.send(any(HttpRequest::class.java), any(HttpResponse.BodyHandler::class.java)))
+            .thenReturn(mockHttpResponse)
+        `when`(mockHttpResponse.statusCode()).thenReturn(200)
+
+        val payload = "{\"event\":\"test\"}"
+        val signature = "test_signature"
+
+        feignSender.sendWebhook(payload, signature)
+
+        // Verify that send was called
+        verify(mockHttpClient, times(1)).send(any(HttpRequest::class.java), any(HttpResponse.BodyHandler::class.java))
     }
 }

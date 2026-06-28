@@ -1,0 +1,32 @@
+# Scenario 1: Successful Request (Valid Payload and Signature)
+# Expected: HTTP 200 OK, Body: "OK"
+curl -X POST \
+  http://localhost:8080/webhooks/receive \
+  -H 'Content-Type: application/json' \
+  -H 'X-Signature: e16cbc2b01c62ea64c2e284ae00e42d3a486eedb108033632c47bbb33068bc92' \
+  -d '{"event": "test", "status": "success", "data": "Hello, World!"}'
+
+# Scenario 2: Tampered Payload (Payload modified, but signature is for the original payload)
+# Expected: HTTP 401 UNAUTHORIZED, Body: "Assinatura Inválida"
+curl -X POST \
+  http://localhost:8080/webhooks/receive \
+  -H 'Content-Type: application/json' \
+  -H 'X-Signature: e16cbc2b01c62ea64c2e284ae00e42d3a486eedb108033632c47bbb33068bc92' \
+  -d '{"event": "test", "status": "success", "data": "Hello, Tampered World!"}'
+
+# Scenario 3: Invalid Signature (Correct payload, but an incorrect hex signature)
+# Expected: HTTP 401 UNAUTHORIZED, Body: "Assinatura Inválida"
+curl -X POST \
+  http://localhost:8080/webhooks/receive \
+  -H 'Content-Type: application/json' \
+  -H 'X-Signature: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  -d '{"event": "test", "status": "success", "data": "Hello, World!"}'
+
+# Scenario 4: Malformed Signature (Signature is not a valid hexadecimal string)
+# This tests the NumberFormatException handling added to SignatureService.kt
+# Expected: HTTP 401 UNAUTHORIZED, Body: "Assinatura Inválida"
+curl -X POST \
+  http://localhost:8080/webhooks/receive \
+  -H 'Content-Type: application/json' \
+  -H 'X-Signature: not_a_hex_string' \
+  -d '{"event": "test", "status": "success", "data": "Hello, World!"}'
