@@ -1,0 +1,68 @@
+services:
+  service:
+    build:
+      context: ./service
+      network: host        # necessário para pip install quando bridge=none no daemon
+    container_name: flask-service
+    environment:
+      PORT: 5000
+    ports:
+      - "5000:5000"
+
+  proxy-open-resty:
+    build:
+      context: ./open-resty
+      network: host        # necessário para pull de pacotes na build
+    container_name: proxy
+    depends_on:
+      - service
+    environment:
+      UPSTREAM_HOST: service   # resolve pelo nome do serviço na rede interna do compose
+      UPSTREAM_PORT: 5000
+    ports:
+      - "8081:8081"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-gateway.yaml:/etc/otelcol-contrib/config.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC
+      - "8889:8889" # Prometheus exporter port
+    depends_on:
+      - proxy-open-resty
+
+  otel-collector-agent:
+    image: otel/opentelemetry-collector-contrib:latest
+    container_name: otel-collector-agent
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./otel-collector-agent.yaml:/etc/otelcol-contrib/config.yaml
+    depends_on:
+      - proxy-open-resty
+      - otel-collector
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus

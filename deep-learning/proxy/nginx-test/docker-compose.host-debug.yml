@@ -1,0 +1,20 @@
+# Modo de debug local: o Flask roda no host via PyCharm (ou linha de comando).
+# O proxy usa network_mode: host, então ele acessa localhost:5000 diretamente.
+#
+# Uso:
+#   docker compose -f docker-compose.host-debug.yml up --build
+#
+# No PyCharm, suba o service/app.py (Run ou Debug) na porta 5000.
+# Acesse o proxy em http://localhost:8081
+
+services:
+  proxy-open-resty:
+    build:
+      context: ./open-resty
+      network: host           # necessário na build pelo daemon bridge=none
+    container_name: proxy-debug
+    network_mode: host        # compartilha a rede do host: proxy acessa localhost:5000 diretamente
+    environment:
+      UPSTREAM_HOST: localhost
+      UPSTREAM_PORT: 5000
+    # ports não é necessário com network_mode: host — a porta 8081 já fica exposta no host

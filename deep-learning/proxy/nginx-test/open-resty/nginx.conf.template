@@ -1,0 +1,41 @@
+worker_processes auto;
+
+events {
+    worker_connections 1024;
+}
+
+http {
+    include /usr/local/openresty/nginx/conf/mime.types;
+    default_type application/octet-stream;
+
+    access_log /dev/stdout;
+    error_log /dev/stderr warn;
+
+    sendfile on;
+
+    keepalive_timeout 65;
+
+    upstream backend {
+        server ${UPSTREAM_HOST}:${UPSTREAM_PORT};
+    }
+
+    server {
+        listen 8081;
+        server_name _;
+
+        location /nginx_status {
+            stub_status on;
+            access_log off;
+            allow all;
+        }
+
+        location / {
+            proxy_pass http://backend;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header x-real-ip $remote_addr;
+            proxy_set_header x-forward $proxy_add_x_forwarded_for;
+            add_header x-proxy-flavour openresty always;
+        }
+    }
+}
