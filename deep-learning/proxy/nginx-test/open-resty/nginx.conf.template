@@ -15,38 +15,52 @@ http {
 
     keepalive_timeout 65;
 
-    # Dicionário de memória compartilhada para armazenar as métricas
+    # Dicionário para as métricas Prometheus (endpoint /metrics)
     lua_shared_dict prometheus_metrics 10M;
 
+    # Dicionário para acumulação de contadores enviados via OTLP HTTP
+    # Chaves: "req:{status}:{path}:{method}" e "dur_sum/count:{path}"
+    lua_shared_dict otlp_metrics 5M;
+
     init_worker_by_lua_block {
-        -- Inicializa a biblioteca do prometheus
+        -- ── Prometheus (endpoint /metrics local) ──────────────────────────────
         prometheus = require("prometheus").init("prometheus_metrics")
-        
-        -- Registra o contador de requisições com labels customizadas (host, status, path, method)
+
         metric_requests = prometheus:counter(
-            "nginx_http_requests_total", 
-            "Number of HTTP requests by status, path and method", 
+            "nginx_http_requests_total",
+            "Number of HTTP requests by status, path and method",
             {"host", "status", "path", "method"}
         )
-        
-        -- Registra o histograma de latência das requisições por rota/path
+
         metric_latency = prometheus:histogram(
-            "nginx_http_request_duration_seconds", 
-            "HTTP request latency in seconds by path", 
+            "nginx_http_request_duration_seconds",
+            "HTTP request latency in seconds by path",
             {"host", "path"}
         )
+
+        -- ── OTLP Exporter (push direto para o OTel Collector) ────────────────
+        -- Carrega o módulo e agenda o timer de flush (apenas no worker 0)
+        local otlp = require("otlp_exporter")
+        otlp.init_timer()
     }
 
     log_by_lua_block {
         local path = ngx.var.uri
-        -- Ignora as rotas de telemetria internas para não poluir as métricas
-        if path ~= "/metrics" and path ~= "/nginx_status" then
-            local status = tostring(ngx.status)
-            local method = ngx.var.request_method
-            local host = ngx.var.host or ""
 
+        -- Ignora rotas internas de telemetria para não poluir as métricas
+        if path ~= "/metrics" and path ~= "/nginx_status" then
+            local status   = tostring(ngx.status)
+            local method   = ngx.var.request_method
+            local host     = ngx.var.host or ""
+            local duration = tonumber(ngx.var.request_time)
+
+            -- Atualiza métricas Prometheus (endpoint /metrics)
             metric_requests:inc(1, {host, status, path, method})
-            metric_latency:observe(tonumber(ngx.var.request_time), {host, path})
+            metric_latency:observe(duration, {host, path})
+
+            -- Atualiza contadores do OTLP exporter (shared dict)
+            local otlp = require("otlp_exporter")
+            otlp.record(status, path, method, duration)
         end
     }
 
@@ -64,7 +78,7 @@ http {
             allow all;
         }
 
-        # Endpoint exposto para exportação das métricas customizadas do Lua
+        # Endpoint Prometheus — mantido para debug local e scraping direto
         location /metrics {
             default_type 'text/plain';
             content_by_lua_block {
