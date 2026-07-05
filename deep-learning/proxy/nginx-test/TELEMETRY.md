@@ -321,3 +321,185 @@ sequenceDiagram
    * **Responsabilidade:** Interface visual e criação de dashboards analíticos.
    * **Como funciona:** Consulta o banco do Prometheus por meio da linguagem PromQL. A cada atualização da tela, o Grafana faz requisições HTTP internas para `http://prometheus:9090` e renderiza os gráficos interativos para o usuário final.
 
+---
+
+## 5. Queries Grafana (PromQL)
+
+As queries abaixo usam as métricas customizadas geradas pelo bloco Lua do OpenResty:
+- `nginx_http_requests_total` — contador com labels `{host, status, path, method}`
+- `nginx_http_request_duration_seconds` — histograma com labels `{host, path}`
+
+> **Como usar no Grafana:** Crie um painel, selecione o datasource **Prometheus** e cole a query no campo **Metrics browser**. Para gráficos de taxa, use o tipo **Time series**; para valores únicos, use **Stat** ou **Gauge**.
+
+---
+
+### 5.1 Taxa de Sucesso Global (2xx)
+
+Percentual de requisições com status 2xx sobre o total, janela de 1 minuto.
+
+```promql
+sum(rate(nginx_http_requests_total{status=~"2.."}[1m]))
+/
+sum(rate(nginx_http_requests_total[1m]))
+* 100
+```
+
+> **Tipo de painel sugerido:** `Stat` ou `Gauge` com limiar: verde ≥ 99%, amarelo ≥ 95%, vermelho < 95%.
+
+---
+
+### 5.2 Taxa de Erros Global (4xx + 5xx)
+
+Percentual de requisições com erro sobre o total.
+
+```promql
+sum(rate(nginx_http_requests_total{status=~"[45].."}[1m]))
+/
+sum(rate(nginx_http_requests_total[1m]))
+* 100
+```
+
+> **Alternativa** — separando 4xx de 5xx em duas séries no mesmo gráfico:
+
+```promql
+# Série 1 — erros de cliente (4xx)
+sum(rate(nginx_http_requests_total{status=~"4.."}[1m]))
+/
+sum(rate(nginx_http_requests_total[1m]))
+* 100
+
+# Série 2 — erros de servidor (5xx)
+sum(rate(nginx_http_requests_total{status=~"5.."}[1m]))
+/
+sum(rate(nginx_http_requests_total[1m]))
+* 100
+```
+
+---
+
+### 5.3 Quantidade de Requisições por Rota (req/s)
+
+Taxa de requisições por segundo, agrupada por `path`.
+
+```promql
+sum by (path) (
+  rate(nginx_http_requests_total[1m])
+)
+```
+
+> **Tipo de painel sugerido:** `Time series` com **Legend** = `{{path}}` para ver uma linha por rota.
+
+Para ver o volume absoluto (total acumulado desde o início), sem `rate`:
+
+```promql
+sum by (path) (nginx_http_requests_total)
+```
+
+---
+
+### 5.4 Sucesso por Rota (2xx/s por path)
+
+```promql
+sum by (path) (
+  rate(nginx_http_requests_total{status=~"2.."}[1m])
+)
+```
+
+---
+
+### 5.5 Erros por Rota (4xx + 5xx por path)
+
+```promql
+sum by (path) (
+  rate(nginx_http_requests_total{status=~"[45].."}[1m])
+)
+```
+
+> **Dica:** Combine as duas queries no mesmo painel `Time series` para comparar sucesso vs. erro por rota lado a lado.
+
+---
+
+### 5.6 Taxa de Sucesso por Rota (%)
+
+Percentual de 2xx dentro de cada `path` individualmente.
+
+```promql
+sum by (path) (rate(nginx_http_requests_total{status=~"2.."}[1m]))
+/
+sum by (path) (rate(nginx_http_requests_total[1m]))
+* 100
+```
+
+---
+
+### 5.7 Breakdown de Status por Rota
+
+Todas as combinações de `path` × `status` de uma vez — útil para tabelas.
+
+```promql
+sum by (path, status) (
+  rate(nginx_http_requests_total[1m])
+)
+```
+
+> **Tipo de painel sugerido:** `Table` com colunas `path`, `status` e `Value` (req/s).
+
+---
+
+### 5.8 Latência Média por Rota (p50)
+
+```promql
+histogram_quantile(0.50,
+  sum by (path, le) (
+    rate(nginx_http_request_duration_seconds_bucket[1m])
+  )
+)
+```
+
+### 5.9 Latência p95 e p99 por Rota
+
+```promql
+# p95
+histogram_quantile(0.95,
+  sum by (path, le) (
+    rate(nginx_http_request_duration_seconds_bucket[1m])
+  )
+)
+
+# p99
+histogram_quantile(0.99,
+  sum by (path, le) (
+    rate(nginx_http_request_duration_seconds_bucket[1m])
+  )
+)
+```
+
+> **Tipo de painel sugerido:** `Time series` com as três séries (p50, p95, p99) para visualizar a distribuição de latência ao longo do tempo.
+
+---
+
+### 5.10 Top 5 Rotas com Mais Erros
+
+```promql
+topk(5,
+  sum by (path) (
+    rate(nginx_http_requests_total{status=~"[45].."}[1m])
+  )
+)
+```
+
+---
+
+### Resumo das Queries
+
+| O que medir                        | Query resumida                                                                                 | Painel       |
+|------------------------------------|-----------------------------------------------------------------------------------------------|--------------|
+| Taxa de sucesso global (%)         | `sum(rate(...{status=~"2.."}[1m])) / sum(rate(...[1m])) * 100`                                | Stat / Gauge |
+| Taxa de erros global (%)           | `sum(rate(...{status=~"[45].."}[1m])) / sum(rate(...[1m])) * 100`                             | Stat / Gauge |
+| Reqs/s por rota                    | `sum by (path) (rate(nginx_http_requests_total[1m]))`                                         | Time series  |
+| Sucesso/s por rota                 | `sum by (path) (rate(...{status=~"2.."}[1m]))`                                                | Time series  |
+| Erros/s por rota                   | `sum by (path) (rate(...{status=~"[45].."}[1m]))`                                             | Time series  |
+| % sucesso por rota                 | `sum by (path) (rate(...{status=~"2.."}[1m])) / sum by (path) (rate(...[1m])) * 100`          | Time series  |
+| Status × rota (tabela)             | `sum by (path, status) (rate(nginx_http_requests_total[1m]))`                                 | Table        |
+| Latência p50/p95/p99 por rota      | `histogram_quantile(0.9X, sum by (path, le) (rate(..._bucket[1m])))`                          | Time series  |
+| Top 5 rotas com mais erros         | `topk(5, sum by (path) (rate(...{status=~"[45].."}[1m])))`                                    | Time series  |

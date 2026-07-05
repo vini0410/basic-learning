@@ -11,7 +11,6 @@ exporters:
   # Exporta métricas no formato Prometheus para o Prometheus raspar
   prometheus:
     endpoint: 0.0.0.0:8889
-    namespace: "nginx"
     resource_to_telemetry_conversion:
       enabled: true
 

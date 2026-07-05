@@ -15,6 +15,41 @@ http {
 
     keepalive_timeout 65;
 
+    # Dicionário de memória compartilhada para armazenar as métricas
+    lua_shared_dict prometheus_metrics 10M;
+
+    init_worker_by_lua_block {
+        -- Inicializa a biblioteca do prometheus
+        prometheus = require("prometheus").init("prometheus_metrics")
+        
+        -- Registra o contador de requisições com labels customizadas (host, status, path, method)
+        metric_requests = prometheus:counter(
+            "nginx_http_requests_total", 
+            "Number of HTTP requests by status, path and method", 
+            {"host", "status", "path", "method"}
+        )
+        
+        -- Registra o histograma de latência das requisições por rota/path
+        metric_latency = prometheus:histogram(
+            "nginx_http_request_duration_seconds", 
+            "HTTP request latency in seconds by path", 
+            {"host", "path"}
+        )
+    }
+
+    log_by_lua_block {
+        local path = ngx.var.uri
+        -- Ignora as rotas de telemetria internas para não poluir as métricas
+        if path ~= "/metrics" and path ~= "/nginx_status" then
+            local status = tostring(ngx.status)
+            local method = ngx.var.request_method
+            local host = ngx.var.host or ""
+
+            metric_requests:inc(1, {host, status, path, method})
+            metric_latency:observe(tonumber(ngx.var.request_time), {host, path})
+        end
+    }
+
     upstream backend {
         server ${UPSTREAM_HOST}:${UPSTREAM_PORT};
     }
@@ -27,6 +62,14 @@ http {
             stub_status on;
             access_log off;
             allow all;
+        }
+
+        # Endpoint exposto para exportação das métricas customizadas do Lua
+        location /metrics {
+            default_type 'text/plain';
+            content_by_lua_block {
+                prometheus:collect()
+            }
         }
 
         location / {
