@@ -19,6 +19,8 @@ services:
     environment:
       UPSTREAM_HOST: service   # resolve pelo nome do serviço na rede interna do compose
       UPSTREAM_PORT: 5000
+      OTEL_ENDPOINT: http://otel-collector:4318   # push das métricas via OTLP HTTP
+      OTEL_FLUSH_INTERVAL: 10                      # flush a cada 10s (facilita o teste)
     ports:
       - "8081:8081"
 
@@ -30,19 +32,8 @@ services:
       - ./otel-collector-gateway.yaml:/etc/otelcol-contrib/config.yaml
     ports:
       - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP (recebe o push do otlp_exporter.lua do proxy)
       - "8889:8889" # Prometheus exporter port
-    depends_on:
-      - proxy-open-resty
-
-  otel-collector-agent:
-    image: otel/opentelemetry-collector-contrib:latest
-    container_name: otel-collector-agent
-    command: ["--config=/etc/otelcol-contrib/config.yaml"]
-    volumes:
-      - ./otel-collector-agent.yaml:/etc/otelcol-contrib/config.yaml
-    depends_on:
-      - proxy-open-resty
-      - otel-collector
 
   prometheus:
     image: prom/prometheus:latest

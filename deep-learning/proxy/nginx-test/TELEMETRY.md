@@ -6,91 +6,103 @@ Este plano descreve como configurar a coleta de métricas do proxy **OpenResty (
 
 ## 1. Arquitetura da Solução
 
-O fluxo de dados de métricas seguirá o seguinte caminho:
+As métricas HTTP são geradas **dentro do próprio OpenResty** por um script Lua
+([open-resty/otlp_exporter.lua](open-resty/otlp_exporter.lua)) que acumula os
+contadores em memória e os **empurra (push)** periodicamente para o OTel Collector
+via **OTLP HTTP/JSON** na porta `4318`. Não há mais scraping do `/nginx_status`.
 
 ```
-[ OpenResty (Nginx) ]
-      │ (expõe /nginx_status)
+[ OpenResty (Nginx + Lua) ]
+      │ (push OTLP HTTP → :4318, a cada OTEL_FLUSH_INTERVAL s)
       ▼
-[ OTel Collector ] (nginx receiver) ──► (otlp/grpc :4317 para outras fontes)
+[ OTel Collector ] (otlp receiver :4317 gRPC / :4318 HTTP)
       │ (prometheus exporter na :8889)
       ▼
 [ Prometheus ] (raspa métricas do OTel Collector na :8889)
       ▲
-      │ (consulta dados)
-[ Grafana ] (dashboard de visualização)
+      │ (consulta dados via PromQL)
+[ Grafana ] (dashboards de visualização)
 ```
 
 ### Detalhes Importantes:
-* **Nginx/OpenResty Metrics:** O Nginx não envia métricas ativamente via OTLP/gRPC por padrão (o módulo OTel do Nginx envia principalmente *traces*). Por isso, usaremos o **nginx receiver** do OTel Collector para raspar as métricas do endpoint `/nginx_status` do OpenResty.
-* **OTLP gRPC Receiver (`localhost:4317`):** O OTel Collector será configurado para expor a porta `4317` (gRPC) no host (`localhost:4317`), permitindo que outras aplicações no futuro enviem métricas/rastros diretamente a ele.
-* **Prometheus:** Servirá como o banco de dados de séries temporais. O OTel Collector irá expor as métricas raspadas do Nginx no formato do Prometheus, que por sua vez raspará o Collector.
-* **Grafana:** Conectará ao Prometheus para criar os painéis visuais.
+* **Geração das métricas (push):** O bloco `log_by_lua_block` chama `otlp_exporter.record()` a cada requisição, atualizando contadores num `lua_shared_dict`. Um `ngx.timer.every` (apenas no worker 0) monta o payload OTLP JSON e faz `POST /v1/metrics` para o Collector.
+* **Métricas expostas:** `nginx_http_requests_total` (counter) e `nginx_http_request_duration_seconds` (histograma com buckets) — detalhadas na seção 5.
+* **OTLP Receiver (`:4317` gRPC / `:4318` HTTP):** O Collector aceita tanto o push do proxy (HTTP :4318) quanto telemetria de outras aplicações (gRPC :4317).
+* **Prometheus:** Raspa o Collector na porta `:8889` (formato Prometheus) e armazena as séries temporais.
+* **Grafana:** Consulta o Prometheus via PromQL para montar os painéis.
 
 ---
 
 ## 2. Passo a Passo de Modificações e Novos Arquivos
 
-### Passo 2.1: Atualizar o OpenResty para Expor as Métricas
-Precisamos habilitar o módulo `stub_status` no OpenResty para expor as métricas nativas do Nginx.
-
-Modificar o arquivo: [open-resty/nginx.conf.template](file:///home/vini0410/code/basic-learning/deep-learning/proxy/nginx-test/open-resty/nginx.conf.template)
-Adicionar o bloco `location /nginx_status` dentro do bloco `server`:
+### Passo 2.1: Exporter Lua no OpenResty (geração + push)
+O arquivo [open-resty/otlp_exporter.lua](open-resty/otlp_exporter.lua) coleta as
+métricas HTTP e as envia via OTLP HTTP. Ele é carregado no
+[open-resty/nginx.conf.template](open-resty/nginx.conf.template):
 
 ```nginx
-        # Endpoint de métricas internas do Nginx
-        location /nginx_status {
-            stub_status on;
-            access_log off;
-            allow all; # Em produção, limitar aos IPs permitidos (ex: OTel Collector)
-        }
+    # DNS interno do Docker — necessário para o resty.http resolver "otel-collector"
+    resolver 127.0.0.11 ipv6=off valid=10s;
+
+    # Acumulador dos contadores entre workers
+    lua_shared_dict otlp_metrics 5M;
+
+    init_worker_by_lua_block {
+        require("otlp_exporter").init_timer()   -- agenda o flush (worker 0)
+    }
+
+    log_by_lua_block {
+        local otlp = require("otlp_exporter")
+        otlp.record(tostring(ngx.status), ngx.var.uri,
+                    ngx.var.request_method, tonumber(ngx.var.request_time))
+    }
 ```
 
-### Passo 2.2: Criar Configuração do OpenTelemetry Collector
-Criar o arquivo `otel-collector-config.yaml` na raiz do projeto para configurar o OTel Collector com suporte a gRPC e recebimento de métricas do Nginx.
+> Não há mais `location /nginx_status` nem `location /metrics` no proxy — o scraping foi removido; tudo é enviado via push.
 
-Criar o arquivo: [otel-collector-config.yaml](file:///home/vini0410/code/basic-learning/deep-learning/proxy/nginx-test/otel-collector-config.yaml)
+### Passo 2.2: Dependência Lua e variáveis (Dockerfile)
+O [open-resty/Dockerfile](open-resty/Dockerfile) instala a lib HTTP usada no push e define os envs do exporter:
+
+```dockerfile
+RUN opm get ledgetech/lua-resty-http
+
+ENV OTEL_ENDPOINT=http://otel-collector:4318   # destino do push (OTLP HTTP)
+# OTEL_FLUSH_INTERVAL e OTEL_SERVICE_NAME podem ser definidos no compose
+```
+
+### Passo 2.3: OTel Collector (gateway)
+Criar/editar o arquivo [otel-collector-gateway.yaml](otel-collector-gateway.yaml) para receber o push e expor no formato Prometheus:
 
 ```yaml
 receivers:
-  # Receptor OTLP (exposto em gRPC na 4317 e HTTP na 4318)
   otlp:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
       http:
-        endpoint: 0.0.0.0:4318
-
-  # Receptor Nginx para raspar o stub_status exposto
-  nginx:
-    endpoint: http://proxy-open-resty:8081/nginx_status
-    collection_interval: 10s
+        endpoint: 0.0.0.0:4318   # recebe o push do proxy (OTLP HTTP JSON)
 
 processors:
   batch:
 
 exporters:
-  # Exporta métricas em formato raspável pelo Prometheus
   prometheus:
-    endpoint: 0.0.0.0:8889
-    namespace: "nginx"
-
-  # Útil para debug local nos logs do container do collector
+    endpoint: 0.0.0.0:8889       # Prometheus raspa aqui
+    resource_to_telemetry_conversion:
+      enabled: true
   debug:
     verbosity: basic
 
 service:
   pipelines:
     metrics:
-      receivers: [otlp, nginx]
+      receivers: [otlp]
       processors: [batch]
       exporters: [prometheus, debug]
 ```
 
-### Passo 2.3: Criar Configuração do Prometheus
-Criar o arquivo `prometheus.yml` para orientar o Prometheus a coletar métricas do OTel Collector.
-
-Criar o arquivo: [prometheus.yml](file:///home/vini0410/code/basic-learning/deep-learning/proxy/nginx-test/prometheus.yml)
+### Passo 2.4: Configuração do Prometheus
+O arquivo [prometheus.yml](prometheus.yml) orienta o Prometheus a raspar o OTel Collector:
 
 ```yaml
 global:
@@ -102,10 +114,9 @@ scrape_configs:
       - targets: ['otel-collector:8889']
 ```
 
-### Passo 2.4: Provisionamento de Datasource no Grafana (Opcional, mas Recomendado)
-Para evitar ter que configurar o Prometheus como datasource manualmente no Grafana, podemos provisioná-lo via código.
-
-Criar o arquivo: [grafana/provisioning/datasources/datasource.yml](file:///home/vini0410/code/basic-learning/deep-learning/proxy/nginx-test/grafana/provisioning/datasources/datasource.yml)
+### Passo 2.5: Provisionamento de Datasource no Grafana
+O datasource Prometheus é provisionado automaticamente via
+[grafana/provisioning/datasources/datasource.yml](grafana/provisioning/datasources/datasource.yml):
 
 ```yaml
 apiVersion: 1
@@ -119,10 +130,12 @@ datasources:
     editable: true
 ```
 
-### Passo 2.5: Atualizar o Docker Compose
-Adicionar os serviços `otel-collector`, `prometheus` e `grafana` no arquivo `docker-compose.yml`.
+O dashboard pronto para import fica em
+[grafana/dashboards/nginx-proxy-dashboard.json](grafana/dashboards/nginx-proxy-dashboard.json)
+(passo a passo de import na seção 6).
 
-Modificar o arquivo: [docker-compose.yml](file:///home/vini0410/code/basic-learning/deep-learning/proxy/nginx-test/docker-compose.yml)
+### Passo 2.6: Docker Compose
+Os serviços `otel-collector`, `prometheus` e `grafana` já estão declarados no arquivo [docker-compose.yml](docker-compose.yml):
 
 ```yaml
 services:
@@ -146,6 +159,8 @@ services:
     environment:
       UPSTREAM_HOST: service
       UPSTREAM_PORT: 5000
+      OTEL_ENDPOINT: http://otel-collector:4318   # push das métricas via OTLP HTTP
+      OTEL_FLUSH_INTERVAL: 10                      # flush a cada 10s
     ports:
       - "8081:8081"
 
@@ -154,10 +169,10 @@ services:
     container_name: otel-collector
     command: ["--config=/etc/otelcol-contrib/config.yaml"]
     volumes:
-      - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
+      - ./otel-collector-gateway.yaml:/etc/otelcol-contrib/config.yaml
     ports:
-      - "4317:4317" # Porta gRPC solicitada exposta no localhost
-      - "4318:4318" # Porta HTTP
+      - "4317:4317" # OTLP gRPC
+      - "4318:4318" # OTLP HTTP (recebe o push do proxy)
       - "8889:8889" # Porta de exportação do Prometheus
     depends_on:
       - proxy-open-resty
@@ -202,12 +217,11 @@ services:
    ```
 
 3. **Verificar os serviços:**
-   * **Endpoint de status do Nginx:** Acesse [http://localhost:8081/nginx_status](http://localhost:8081/nginx_status) e verifique se exibe dados de conexões.
-   * **Métricas brutas no OTel Collector:** Acesse [http://localhost:8889/metrics](http://localhost:8889/metrics) para ver o formato Prometheus exportado pelo Collector. Procure por `nginx_connections_active` ou `nginx_connections_accepted`.
+   * **Métricas no OTel Collector:** Acesse [http://localhost:8889/metrics](http://localhost:8889/metrics) e procure por `nginx_http_requests_total` e `nginx_http_request_duration_seconds_bucket`. Elas devem ter o label `otel_scope_name="otlp_exporter.lua"`, o que confirma que vieram do **push** do script Lua.
    * **Prometheus:** Acesse [http://localhost:9090](http://localhost:9090), vá em "Status" > "Targets" e certifique-se de que o `otel-collector` está com status `UP`.
    * **Grafana:** Acesse [http://localhost:3000](http://localhost:3000) (Login: `admin` / Senha: `admin`).
      * O datasource **Prometheus** já estará configurado.
-     * Você pode criar um painel simples de teste buscando a métrica `nginx_nginx_connections_active` ou importar um Dashboard pronto de Nginx da comunidade Grafana (ex: ID `12786` ou similar que leia do Prometheus).
+     * Importe o dashboard [grafana/dashboards/nginx-proxy-dashboard.json](grafana/dashboards/nginx-proxy-dashboard.json) — ver seção 6.
 
 ---
 
@@ -229,17 +243,15 @@ flowchart TD
     subgraph DockerCompose ["Ambiente Docker Compose (Rede Compose)"]
         subgraph ProxyContainer ["Container proxy-open-resty (:8081)"]
             Nginx["Nginx Engine"]
-            Status["Endpoint /nginx_status"]
-            Nginx -->|Registra tráfego| Status
+            Lua["otlp_exporter.lua (shared dict + timer)"]
+            Nginx -->|log_by_lua registra cada req| Lua
         end
 
         subgraph OTelContainer ["Container otel-collector"]
-            OTelRecvNginx["Receiver 'nginx' (Pull)"]
             OTelRecvOTLP["Receiver 'otlp' (gRPC :4317 / HTTP :4318)"]
             OTelProc["Processor 'batch'"]
             OTelExpProm["Exporter 'prometheus' (:8889)"]
 
-            OTelRecvNginx --> OTelProc
             OTelRecvOTLP --> OTelProc
             OTelProc --> OTelExpProm
         end
@@ -258,7 +270,7 @@ flowchart TD
     AppHost -->|Envio de telemetria gRPC| OTelRecvOTLP
 
     %% Conexões Internas de Telemetria
-    Status -.->|OTel Collector puxa a cada 10s| OTelRecvNginx
+    Lua -.->|push OTLP HTTP a cada 10s → :4318| OTelRecvOTLP
     OTelExpProm -.->|Prometheus raspa a cada 5s| PromDB
     PromDB -.->|Grafana consulta via PromQL| GrafanaUI
 ```
@@ -279,14 +291,15 @@ sequenceDiagram
     Note over U,N: 1. Geração de Métricas
     U->>N: Envia requisição HTTP (ex: /route-a na porta 8081)
     N-->>U: Processa e retorna a resposta
-    Note over N: Nginx incrementa requisições<br/>e conexões no stub_status
+    Note over N: log_by_lua_block chama otlp_exporter.record()<br/>e acumula contadores no shared dict
 
-    Note over N,C: 2. Coleta das Métricas (Pull pelo OTel)
-    C->>N: GET http://proxy-open-resty:8081/nginx_status (a cada 10s)
-    N-->>C: Retorna dados textuais (Active connections, Reading/Writing/Waiting, etc)
+    Note over N,C: 2. Envio das Métricas (Push pelo Lua)
+    Note over N: ngx.timer.every dispara o flush (worker 0)
+    N->>C: POST http://otel-collector:4318/v1/metrics (OTLP HTTP JSON, a cada 10s)
+    C-->>N: 200 OK
 
     Note over C,P: 3. Tradução e Raspagem (Scrape pelo Prometheus)
-    C->>C: OTel processa e traduz os dados brutos<br/>em formato OpenTelemetry (Nginx metrics)
+    C->>C: OTel converte o OTLP em séries Prometheus
     P->>C: GET http://otel-collector:8889/metrics (a cada 5s)
     C-->>P: Retorna métricas estruturadas compatíveis com Prometheus
 
@@ -303,15 +316,14 @@ sequenceDiagram
 ### 4.3 Componentes do Fluxo e suas Responsabilidades
 
 1. **Nginx (OpenResty - Porta 8081)**:
-   * **Responsabilidade:** Proxy reverso da aplicação e gerador das métricas de tráfego brutas.
-   * **Endpoint de Exposição:** `/nginx_status`.
-   * **Como funciona:** O módulo nativo do Nginx `stub_status` mantém em memória contadores simplificados (conexões ativas, aceitas, manipuladas, taxa de requisições). Ele serve essas informações em formato de texto simples quando requisitado.
+   * **Responsabilidade:** Proxy reverso da aplicação e gerador das métricas HTTP via script Lua.
+   * **Como funciona:** O `log_by_lua_block` chama `otlp_exporter.record()` a cada requisição, acumulando contadores (por status/path/method) e buckets de latência (por status/path) num `lua_shared_dict`. Um `ngx.timer.every` monta o payload OTLP JSON e faz **push** via HTTP `POST /v1/metrics` para o Collector — sem expor nenhum endpoint de scraping.
 
 2. **OpenTelemetry Collector (Portas 4317, 4318, 8889)**:
-   * **Responsabilidade:** Concentrar, padronizar e despachar os dados de telemetria.
-   * **Receptor Nginx:** Executa um cliente HTTP que realiza polling periódico (a cada 10s) no endpoint `/nginx_status` do Nginx, convertendo as estatísticas de texto puro em métricas estruturadas do padrão OpenTelemetry.
-   * **Receptor OTLP (gRPC :4317):** Fica ouvindo na porta de rede gRPC (mapeada no host em `localhost:4317`) permitindo que qualquer outra aplicação (como o backend Flask ou outros microserviços) possa enviar ativamente seus traces/métricas.
-   * **Exportador Prometheus (Porta 8889):** Converte a base de métricas unificada do Collector e as disponibiliza na rota `/metrics` no formato do Prometheus.
+   * **Responsabilidade:** Receber, padronizar e despachar os dados de telemetria.
+   * **Receptor OTLP (HTTP :4318):** Recebe o **push** do proxy (OTLP HTTP JSON) com o counter e o histograma.
+   * **Receptor OTLP (gRPC :4317):** Disponível para outras aplicações enviarem traces/métricas ativamente.
+   * **Exportador Prometheus (Porta 8889):** Converte as métricas e as dispõe na rota `/metrics` no formato do Prometheus.
 
 3. **Prometheus (Porta 9090)**:
    * **Responsabilidade:** Banco de dados de série temporal (TSDB) e motor de regras de alerta.
@@ -325,9 +337,9 @@ sequenceDiagram
 
 ## 5. Queries Grafana (PromQL)
 
-As queries abaixo usam as métricas customizadas geradas pelo bloco Lua do OpenResty:
-- `nginx_http_requests_total` — contador com labels `{host, status, path, method}`
-- `nginx_http_request_duration_seconds` — histograma com labels `{host, path}`
+As queries abaixo usam as métricas geradas pelo exporter Lua do OpenResty (push OTLP):
+- `nginx_http_requests_total` — counter com labels `{status, path, method}`
+- `nginx_http_request_duration_seconds` — histograma (`_bucket` / `_sum` / `_count`) com labels `{status, path}`
 
 > **Como usar no Grafana:** Crie um painel, selecione o datasource **Prometheus** e cole a query no campo **Metrics browser**. Para gráficos de taxa, use o tipo **Time series**; para valores únicos, use **Stat** ou **Gauge**.
 
@@ -490,6 +502,52 @@ topk(5,
 
 ---
 
+### 5.11 Sucesso e Erro de um Endpoint Específico
+
+Basta filtrar por `path`. Troque `/route-a` pelo endpoint desejado (no dashboard isso vira a variável `$path`).
+
+```promql
+# % de sucesso (2xx) de /route-a
+sum(rate(nginx_http_requests_total{path="/route-a", status=~"2.."}[1m]))
+/
+sum(rate(nginx_http_requests_total{path="/route-a"}[1m]))
+* 100
+```
+
+```promql
+# % de erro (4xx+5xx) de /route-a
+(sum(rate(nginx_http_requests_total{path="/route-a", status=~"[45].."}[1m])) or vector(0))
+/
+sum(rate(nginx_http_requests_total{path="/route-a"}[1m]))
+* 100
+```
+
+> O `or vector(0)` evita que a série "suma" quando não há nenhum erro no intervalo (numerador vazio).
+
+---
+
+### 5.12 Latência Média da Aplicação (ms)
+
+Usa `_sum` / `_count` do histograma. Multiplicado por 1000 para exibir em milissegundos.
+
+```promql
+# Média GERAL da aplicação
+sum(rate(nginx_http_request_duration_seconds_sum[1m]))
+/
+sum(rate(nginx_http_request_duration_seconds_count[1m]))
+* 1000
+```
+
+```promql
+# Média por rota
+sum by (path) (rate(nginx_http_request_duration_seconds_sum[1m]))
+/
+sum by (path) (rate(nginx_http_request_duration_seconds_count[1m]))
+* 1000
+```
+
+---
+
 ### Resumo das Queries
 
 | O que medir                        | Query resumida                                                                                 | Painel       |
@@ -503,3 +561,29 @@ topk(5,
 | Status × rota (tabela)             | `sum by (path, status) (rate(nginx_http_requests_total[1m]))`                                 | Table        |
 | Latência p50/p95/p99 por rota      | `histogram_quantile(0.9X, sum by (path, le) (rate(..._bucket[1m])))`                          | Time series  |
 | Top 5 rotas com mais erros         | `topk(5, sum by (path) (rate(...{status=~"[45].."}[1m])))`                                    | Time series  |
+| Sucesso/erro de 1 endpoint (%)     | `sum(rate(...{path="/x", status=~"2.."}[1m])) / sum(rate(...{path="/x"}[1m])) * 100`          | Stat / TS    |
+| Latência média (ms)                | `sum(rate(..._sum[1m])) / sum(rate(..._count[1m])) * 1000`                                    | Stat / TS    |
+
+---
+
+## 6. Dashboard Grafana (import)
+
+Um dashboard pronto com todos os painéis acima está em
+[grafana/dashboards/nginx-proxy-dashboard.json](grafana/dashboards/nginx-proxy-dashboard.json).
+
+### Painéis incluídos
+- **Stats globais:** taxa de sucesso 2xx, taxa de erro 4xx+5xx, latência média e throughput total.
+- **Requisições/s por rota** e **% de sucesso por rota**.
+- **Latência p50/p95/p99** (histograma) e **erros/s por rota**.
+- **Endpoint `$path` — Sucesso vs Erro (%)**: painel com a variável `path` para inspecionar um endpoint específico.
+- **Tabela Status × Rota** (req/s).
+
+### Como importar
+1. Suba o ambiente: `docker compose up --build -d`.
+2. Gere tráfego: `python test_proxy.py` (ou requisições a `http://localhost:8081/...`).
+3. Acesse o Grafana em [http://localhost:3000](http://localhost:3000) (`admin` / `admin`).
+4. Menu lateral → **Dashboards** → **New** → **Import**.
+5. Clique em **Upload dashboard JSON file** e selecione `grafana/dashboards/nginx-proxy-dashboard.json`.
+6. Quando solicitado, escolha o datasource **Prometheus** (já provisionado) e conclua com **Import**.
+
+> Observação: as métricas só aparecem após o primeiro flush do proxy (padrão: 10s) seguido de um scrape do Prometheus (5s). Aguarde ~15s após gerar tráfego.

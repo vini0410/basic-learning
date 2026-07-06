@@ -1,9 +1,6 @@
 FROM openresty/openresty:alpine-fat
 
-# Instala a biblioteca do prometheus para Lua usando OPM
-RUN opm get knyar/nginx-lua-prometheus
-
-# Instala lua-resty-http para envio de métricas via OTLP HTTP
+# Instala lua-resty-http para envio de métricas via OTLP HTTP (push)
 RUN opm get ledgetech/lua-resty-http
 
 COPY nginx.conf.template /etc/nginx/templates/nginx.conf.template

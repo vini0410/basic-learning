@@ -23,9 +23,10 @@ end
 -- ─── Shared Dict ───────────────────────────────────────────────────────────────
 -- Usamos ngx.shared["otlp_metrics"] para acumular contadores entre workers.
 -- Chaves:
---   "req:{status}:{path}:{method}" → contagem acumulada (integer)
---   "dur_sum:{path}"               → soma das durações em segundos (float * 1000, armazenado como int)
---   "dur_count:{path}"             → número de requisições com duração registrada
+--   "req:{status}:{path}:{method}" → contador de requisições (integer)
+--   "hb:{status}:{path}:{idx}"     → contagem do bucket idx do histograma (integer)
+--   "hs:{status}:{path}"           → soma das durações em microssegundos (integer)
+--   "hc:{status}:{path}"           → número de requisições contabilizadas no histograma
 
 local DICT_NAME = "otlp_metrics"
 
@@ -38,25 +39,38 @@ local function get_dict()
     return d
 end
 
+-- ─── Buckets do histograma (segundos) ─────────────────────────────────────────
+-- Limites explícitos padrão (estilo Prometheus). O bucket +Inf é implícito
+-- (índice #BUCKETS+1), totalizando #BUCKETS+1 contadores por série.
+local BUCKETS = { 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10 }
+
+local function bucket_index(duration_s)
+    for i = 1, #BUCKETS do
+        if duration_s <= BUCKETS[i] then
+            return i
+        end
+    end
+    return #BUCKETS + 1   -- bucket +Inf
+end
+
 -- ─── record() ─────────────────────────────────────────────────────────────────
 -- Chamado a cada requisição no log_by_lua_block.
--- Incrementa o contador da combinação {status, path, method} e acumula a duração.
+-- Alimenta o contador {status, path, method} e o histograma {status, path}.
 
 function _M.record(status, path, method, duration_s)
     local dict = get_dict()
     if not dict then return end
 
-    -- Contador de requisições
+    -- Contador de requisições (taxa de sucesso/erro por status/path/method)
     local req_key = "req:" .. status .. ":" .. path .. ":" .. method
     dict:incr(req_key, 1, 0)
 
-    -- Duração: soma (armazenada em microssegundos para manter precisão como integer)
+    -- Histograma de latência por status/path
     if duration_s then
-        local dur_sum_key   = "dur_sum:" .. path
-        local dur_count_key = "dur_count:" .. path
-        local us = math.floor(duration_s * 1e6)  -- converte para microssegundos inteiros
-        dict:incr(dur_sum_key, us, 0)
-        dict:incr(dur_count_key, 1, 0)
+        local idx = bucket_index(duration_s)
+        dict:incr("hb:" .. status .. ":" .. path .. ":" .. idx, 1, 0)
+        dict:incr("hs:" .. status .. ":" .. path, math.floor(duration_s * 1e6), 0)
+        dict:incr("hc:" .. status .. ":" .. path, 1, 0)
     end
 end
 
@@ -65,6 +79,16 @@ end
 local function now_unix_nano()
     -- ngx.now() retorna segundos com milissegundos; convertemos para nanosegundos
     return string.format("%.0f", ngx.now() * 1e9)
+end
+
+-- Timestamp fixo de início do processo — usado como startTimeUnixNano nas
+-- métricas cumulativas (counter e histograma). Capturado no primeiro flush.
+local process_start_ns = nil
+local function start_unix_nano()
+    if not process_start_ns then
+        process_start_ns = now_unix_nano()
+    end
+    return process_start_ns
 end
 
 local function make_attr(key, str_value)
@@ -94,22 +118,32 @@ function _M.flush(premature)
     local cfg    = get_config()
     local now_ns = now_unix_nano()
 
-    -- ── Coleta contadores de requisições ──────────────────────────────────────
+    -- ── Coleta as séries do shared dict ───────────────────────────────────────
     local req_datapoints = {}
-    local dur_datapoints = {}
+    local hist = {}   -- "{status}\0{path}" → { status, path, buckets[], sum_us, count }
 
+    local function hist_entry(status, path)
+        local k = status .. "\0" .. path
+        local e = hist[k]
+        if not e then
+            e = { status = status, path = path, buckets = {}, sum_us = 0, count = 0 }
+            for i = 1, #BUCKETS + 1 do e.buckets[i] = 0 end
+            hist[k] = e
+        end
+        return e
+    end
+
+    local start_ns = start_unix_nano()
     local keys = dict:get_keys(0)  -- 0 = sem limite de chaves
     for _, key in ipairs(keys) do
         local value = dict:get(key)
         if not value then goto continue end
 
-        -- Contadores de requisições: "req:{status}:{path}:{method}"
+        -- Contador de requisições: "req:{status}:{path}:{method}"
         if key:sub(1, 4) == "req:" then
             local rest = key:sub(5)
-            -- Extrai status (3 chars) + path + method
             local status = rest:sub(1, 3)
             local remainder = rest:sub(5)  -- pula o ":" após status
-            -- Divide no último ":" para separar path e method
             local last_colon = remainder:find(":[^:]*$")
             local path, method
             if last_colon then
@@ -125,32 +159,60 @@ function _M.flush(premature)
                 make_attr("path", path),
                 make_attr("method", method),
             }
-            table.insert(req_datapoints, make_sum_datapoint(attrs, value, now_ns, now_ns))
+            table.insert(req_datapoints, make_sum_datapoint(attrs, value, start_ns, now_ns))
 
-        -- Duração: "dur_sum:{path}" e "dur_count:{path}"
-        elseif key:sub(1, 8) == "dur_sum:" then
-            local path      = key:sub(9)
-            local sum_us    = value
-            local count_key = "dur_count:" .. path
-            local count     = dict:get(count_key) or 1
+        -- Histograma — bucket: "hb:{status}:{path}:{idx}"
+        elseif key:sub(1, 3) == "hb:" then
+            local rest = key:sub(4)
+            local status = rest:sub(1, 3)
+            local remainder = rest:sub(5)  -- pula o ":" após status
+            local last_colon = remainder:find(":[^:]*$")
+            if last_colon then
+                local path = remainder:sub(1, last_colon - 1)
+                local idx  = tonumber(remainder:sub(last_colon + 1))
+                if idx then
+                    hist_entry(status, path).buckets[idx] = value
+                end
+            end
 
-            -- Expõe como duas métricas: soma total (em segundos) e contagem
-            local sum_s = sum_us / 1e6
-            local attrs = { make_attr("path", path) }
+        -- Histograma — soma em µs: "hs:{status}:{path}"
+        elseif key:sub(1, 3) == "hs:" then
+            local rest = key:sub(4)
+            local status = rest:sub(1, 3)
+            local path = rest:sub(5)
+            hist_entry(status, path).sum_us = value
 
-            -- Gauge: duração média atual
-            table.insert(dur_datapoints, {
-                attributes    = attrs,
-                timeUnixNano  = now_ns,
-                asDouble      = sum_s / count,  -- latência média em segundos
-            })
+        -- Histograma — contagem: "hc:{status}:{path}"
+        elseif key:sub(1, 3) == "hc:" then
+            local rest = key:sub(4)
+            local status = rest:sub(1, 3)
+            local path = rest:sub(5)
+            hist_entry(status, path).count = value
         end
 
         ::continue::
     end
 
+    -- Monta os data points do histograma (bucketCounts não-cumulativos, padrão OTLP)
+    local hist_datapoints = {}
+    for _, e in pairs(hist) do
+        local bucket_counts = {}
+        for i = 1, #BUCKETS + 1 do
+            bucket_counts[i] = tostring(e.buckets[i] or 0)
+        end
+        table.insert(hist_datapoints, {
+            attributes        = { make_attr("status", e.status), make_attr("path", e.path) },
+            startTimeUnixNano = start_ns,
+            timeUnixNano      = now_ns,
+            count             = tostring(e.count),
+            sum               = e.sum_us / 1e6,   -- segundos
+            bucketCounts      = bucket_counts,
+            explicitBounds    = BUCKETS,
+        })
+    end
+
     -- Se não há dados, não envia payload vazio
-    if #req_datapoints == 0 and #dur_datapoints == 0 then
+    if #req_datapoints == 0 and #hist_datapoints == 0 then
         ngx.log(ngx.DEBUG, "[otlp_exporter] nenhuma métrica para enviar")
         return
     end
@@ -172,13 +234,14 @@ function _M.flush(premature)
         })
     end
 
-    if #dur_datapoints > 0 then
+    if #hist_datapoints > 0 then
         table.insert(metrics, {
-            name        = "nginx_http_request_duration_avg_seconds",
-            description = "Latência média das requisições HTTP por path",
+            name        = "nginx_http_request_duration_seconds",
+            description = "Histograma de latência das requisições HTTP por status e path",
             unit        = "s",
-            gauge       = {
-                dataPoints = dur_datapoints,
+            histogram   = {
+                dataPoints             = hist_datapoints,
+                aggregationTemporality = 2,   -- AGGREGATION_TEMPORALITY_CUMULATIVE
             },
         })
     end
@@ -236,7 +299,7 @@ function _M.flush(premature)
     else
         ngx.log(ngx.DEBUG, "[otlp_exporter] flush enviado com sucesso — ",
                 #req_datapoints, " séries de req, ",
-                #dur_datapoints, " séries de duração")
+                #hist_datapoints, " séries de histograma")
     end
 end
 

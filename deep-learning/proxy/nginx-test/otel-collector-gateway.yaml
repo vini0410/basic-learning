@@ -3,6 +3,9 @@ receivers:
     protocols:
       grpc:
         endpoint: 0.0.0.0:4317
+      # Recebe o push OTLP HTTP/JSON enviado pelo otlp_exporter.lua do proxy
+      http:
+        endpoint: 0.0.0.0:4318
 
 processors:
   batch:
