@@ -1,0 +1,33 @@
+// -----------------------------------------------------------
+// 1️⃣ Plugins – must be the very first block
+// -----------------------------------------------------------
+plugins {
+    id 'java-library'                // only needed if you ever build something at the root
+    id 'maven-publish'               // keep if you plan to publish artifacts
+    id 'io.quarkus' version '3.13.3' // provides quarkusDev / quarkusBuild tasks
+}
+
+// -----------------------------------------------------------
+// 2️⃣ Apply the versions script (now *after* plugins)
+// -----------------------------------------------------------
+apply from: "versions.gradle"
+
+// -----------------------------------------------------------
+// 3️⃣ Repository definition – visible to every sub‑project
+// -----------------------------------------------------------
+allprojects {
+    repositories {
+        mavenCentral()
+        // JBoss releases (contains a few Keycloak artifacts that aren’t on Maven Central)
+        maven { url "https://repository.jboss.org/nexus/content/repositories/releases" }
+    }
+}
+
+// -----------------------------------------------------------
+// 4️⃣ Common project metadata (group / version / description)
+// -----------------------------------------------------------
+allprojects {
+    group = 'com.example.keycloak'          // change if you prefer another group
+    version = '1.0.0-SNAPSHOT'
+    description = "Keycloak custom modules"
+}
