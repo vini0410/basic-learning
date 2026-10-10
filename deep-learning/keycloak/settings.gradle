@@ -1,3 +1,3 @@
-rootProject.name = "keycloak-custom"
-
-include(":my-provider")
+rootProject.name = "keycloak-project"
+include("keycloak-base")
+include("keycloak-custom")

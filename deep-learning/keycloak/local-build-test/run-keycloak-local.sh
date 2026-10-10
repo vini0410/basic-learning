@@ -48,6 +48,6 @@ export KC_DB_PASSWORD=password
 export KEYCLOAK_ADMIN=admin
 export KEYCLOAK_ADMIN_PASSWORD=admin
 
-# Start Keycloak in development mode
+# Start Keycloak in development mode (pass any additional CLI args like --debug)
 cd "$KC_DIR"
-./bin/kc.sh start-dev
+./bin/kc.sh start-dev "$@"

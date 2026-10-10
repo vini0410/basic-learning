@@ -43,3 +43,10 @@ Create a reproducible **test** Keycloak authentication server (no production int
 - Add a placeholder GitHub Actions workflow.
 
 *All agents should write their outputs to the `docs/` folder as markdown artifacts and update `agent_status.json`.*
+
+
+Para rodar localmente e copiar o novo JAR do provider:
+
+    ./gradlew :keycloak-custom:jar
+    cp keycloak-custom/build/libs/keycloak-custom-1.0.0-SNAPSHOT.jar keycloak-dist/providers/
+    ./local-build-test/run-keycloak-local.sh --debug

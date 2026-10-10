@@ -1,3 +1,0 @@
-ext {
-    keycloakVersion = '24.0.5'
-}

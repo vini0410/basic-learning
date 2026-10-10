@@ -13,3 +13,5 @@
 **/.cproject
 **/.metadata/
 **/.DS_Store
+
+**/keycloak-dist/
