@@ -1,0 +1,87 @@
+# ==========================================================
+# Custom Protocol Mapper - Company Context & Permissions
+# SPI: ProtocolMapper (OIDCAccessTokenMapper, OIDCIDTokenMapper, UserInfoTokenMapper)
+# Injeta a claim 'company_context' com tenant, tier, features e permissions
+# ==========================================================
+
+@baseUrl = http://localhost:8080
+@realm = demo
+@clientId = my-client
+@clientSecret = my-secret
+@adminUser = admin
+@adminPass = admin
+@username = john.doe
+@password = s3cr3t
+
+### 1. Obter Token de Administração (Realm Master)
+# Necessário para gerenciar e configurar mappers e atributos de usuários via Admin API
+# @name adminLogin
+POST {{baseUrl}}/realms/master/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=admin-cli&username={{adminUser}}&password={{adminPass}}
+
+### 2. Localizar o Client (my-client) para obter seu UUID interno
+# @name findClient
+GET {{baseUrl}}/admin/realms/{{realm}}/clients?clientId={{clientId}}
+Authorization: Bearer {{adminLogin.response.body.access_token}}
+
+### 3. Associar o "Company Context & Permissions Mapper" ao Client
+# Registra o ProtocolMapper customizado no client especificado
+# @name addCustomMapper
+POST {{baseUrl}}/admin/realms/{{realm}}/clients/{{findClient.response.body.$[0].id}}/protocol-mappers/models
+Authorization: Bearer {{adminLogin.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "name": "company-context-mapper",
+  "protocol": "openid-connect",
+  "protocolMapper": "company-context-protocol-mapper",
+  "consentRequired": false,
+  "config": {
+    "default_tier": "PRO",
+    "internal_email_domain": "@example.com",
+    "access.token.claim": "true",
+    "id.token.claim": "true",
+    "userinfo.token.claim": "true"
+  }
+}
+
+### 4. Localizar o Usuário (john.doe) para obter seu ID interno
+# @name findUser
+GET {{baseUrl}}/admin/realms/{{realm}}/users?username={{username}}
+Authorization: Bearer {{adminLogin.response.body.access_token}}
+
+### 5. Enriquecer o Usuário com Atributos de Negócio (tenant_id e tier)
+# Define tenant_id="acme-corp-42" e tier="ENTERPRISE" para cálculo dinâmico
+# @name enrichUserAttributes
+PUT {{baseUrl}}/admin/realms/{{realm}}/users/{{findUser.response.body.$[0].id}}
+Authorization: Bearer {{adminLogin.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "username": "{{username}}",
+  "email": "john.doe@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "enabled": true,
+  "attributes": {
+    "tenant_id": ["acme-corp-42"],
+    "tier": ["ENTERPRISE"]
+  }
+}
+
+### 6. Autenticar Usuário e Gerar Tokens com as Claims Injetadas!
+# Executa login do john.doe (Resource Owner Password Credentials).
+# O access_token e id_token retornarão contendo a claim 'company_context'.
+# @name userLoginWithCustomClaims
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{clientId}}&client_secret={{clientSecret}}&username={{username}}&password={{password}}&scope=openid profile email
+
+### 7. Validar Claims no Endpoint UserInfo (OIDC)
+# Mostra que a claim 'company_context' também está presente no perfil OIDC do usuário
+# @name userInfoCheck
+GET {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/userinfo
+Authorization: Bearer {{userLoginWithCustomClaims.response.body.access_token}}

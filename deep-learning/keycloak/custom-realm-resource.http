@@ -1,0 +1,34 @@
+# ==========================================================
+# Custom Realm Resource SPI - Endpoints REST Personalizados
+# SPI: RealmResourceProvider
+# Base Path: {{baseUrl}}/realms/{{realm}}/custom/*
+# ==========================================================
+
+@baseUrl = http://localhost:8080
+@realm = demo
+@adminUser = admin
+@adminPass = admin
+
+### 1. Obter Token de Administração (Realm Master)
+# Autentica como admin para operações ou validações que precisem de token
+# @name adminLogin
+POST {{baseUrl}}/realms/master/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=admin-cli&username={{adminUser}}&password={{adminPass}}
+
+### 2. Custom Realm Health Check (Realm de Negócio: demo)
+# Invoca o RealmResourceProvider customizado (ID: "custom")
+# Retorna: status (UP), timestamp, nome do realm e se ele está ativo
+# @name customRealmHealth
+GET {{baseUrl}}/realms/{{realm}}/custom/health
+
+### 3. Custom Realm Version Info (Realm de Negócio: demo)
+# Retorna informações da extensão customizada, versão do Keycloak e JVM
+# @name customRealmVersion
+GET {{baseUrl}}/realms/{{realm}}/custom/version
+
+### 4. Custom Realm Health Check no Realm Master
+# Valida que o SPI é multi-tenant e responde para qualquer realm da instância
+# @name customMasterHealth
+GET {{baseUrl}}/realms/master/custom/health

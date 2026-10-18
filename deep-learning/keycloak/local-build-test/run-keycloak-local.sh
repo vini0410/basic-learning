@@ -53,6 +53,15 @@ export KC_DB_PASSWORD=password
 export KEYCLOAK_ADMIN=admin
 export KEYCLOAK_ADMIN_PASSWORD=admin
 
+# Build and copy custom provider jar if keycloak-custom exists
+if [[ -d "$ROOT_DIR/keycloak-custom" ]]; then
+  echo "[INFO] Building keycloak-custom..."
+  "$ROOT_DIR/gradlew" -p "$ROOT_DIR" :keycloak-custom:build -q
+  mkdir -p "$KC_DIR/providers"
+  cp "$ROOT_DIR/keycloak-custom/build/libs/"*.jar "$KC_DIR/providers/"
+  echo "[INFO] Custom provider jar deployed to $KC_DIR/providers"
+fi
+
 # Start Keycloak in development mode (pass any additional CLI args like --debug)
 cd "$KC_DIR"
 ./bin/kc.sh start-dev --log-level=debug "$@"
