@@ -48,5 +48,5 @@ Create a reproducible **test** Keycloak authentication server (no production int
 Para rodar localmente e copiar o novo JAR do provider:
 
     ./gradlew :keycloak-custom:jar
-    cp keycloak-custom/build/libs/keycloak-custom-1.0.0-SNAPSHOT.jar keycloak-dist/providers/
-    ./local-build-test/run-keycloak-local.sh --debug
+    cp keycloak-custom/build/libs/keycloak-custom-1.0.0-SNAPSHOT.jar local-build-test/keycloak-dist/providers/
+    local-build-test/run-keycloak-local.sh

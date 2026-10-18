@@ -1,0 +1,96 @@
+# ==========================================================
+# OIDC / OAuth 2.0 Client Consumption Endpoints
+# Focus: How applications & clients interact with Keycloak
+# ==========================================================
+
+@baseUrl = http://localhost:8080
+@realm = demo
+@clientId = my-client
+@clientSecret = my-secret
+@username = john.doe
+@password = s3cr3t
+@redirectUri = http://localhost:8080/callback
+
+### 1. OpenID Connect Discovery (.well-known/openid-configuration)
+# Any client starts here to auto-discover all endpoints, supported scopes, response types, etc.
+# @name discovery
+GET {{baseUrl}}/realms/{{realm}}/.well-known/openid-configuration
+
+### 2. JSON Web Key Set (JWKS)
+# Used by Resource Servers / APIs to fetch public keys to verify JWT signatures offline
+# @name jwks
+GET {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/certs
+
+### 3. Authorization Endpoint (Browser Redirection)
+# For web apps / SPAs using Authorization Code Flow (with PKCE)
+# Open this URL directly in your browser:
+# {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/auth?client_id={{clientId}}&response_type=code&scope=openid%20profile%20email&redirect_uri={{redirectUri}}&state=xyz123
+#
+# NOTE: HTTP Client cannot complete browser user interaction, but this GET verifies the endpoint responds:
+# @name authorizeEndpointCheck
+GET {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/auth?client_id={{clientId}}&response_type=code&scope=openid%20profile%20email&redirect_uri={{redirectUri}}&state=xyz123
+
+### 4. Exchange Authorization Code for Tokens (Authorization Code Flow)
+# After user authenticates in the browser, Keycloak redirects back with '?code=...'
+# Paste your code here to exchange it for tokens:
+@authCode = 4b0b8e4b-dc4b-41c1-bb72-903aea9eda38.af0c92cb-4929-4eba-bfdf-5eb64aac7e80.6682c90e-da25-48dc-972d-6c351954f6a2
+
+# @name exchangeCode
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=authorization_code&client_id={{clientId}}&client_secret={{clientSecret}}&code={{authCode}}&redirect_uri={{redirectUri}}
+
+### 5. Client Credentials Flow (Machine-to-Machine / Service-to-Service)
+# Used by background services, microservices, and cron jobs without a human user
+# @name clientCredentialsToken
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id={{clientId}}&client_secret={{clientSecret}}
+
+### 6. Resource Owner Password Credentials Flow (Direct Login)
+# Used for trusted legacy applications or direct CLI / testing authentication
+# @name userPasswordToken
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{clientId}}&client_secret={{clientSecret}}&username={{username}}&password={{password}}&scope=openid profile email
+
+### 7. UserInfo Endpoint (OIDC User Profile)
+# Fetches authenticated user's profile claims using the access token
+# @name userInfo
+GET {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/userinfo
+Authorization: Bearer {{userPasswordToken.response.body.access_token}}
+
+### 8. Refresh Token Flow
+# Renews expired access token using the refresh token without prompting user credentials
+# @name refreshToken
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token&client_id={{clientId}}&client_secret={{clientSecret}}&refresh_token={{userPasswordToken.response.body.refresh_token}}
+
+### 9. Token Introspection (RFC 7662)
+# Used by Resource Servers (APIs) to validate active state, scopes, exp, and permissions of a token
+# @name introspectToken
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token/introspect
+Content-Type: application/x-www-form-urlencoded
+
+token={{userPasswordToken.response.body.access_token}}&client_id={{clientId}}&client_secret={{clientSecret}}
+
+### 10. Token Revocation (RFC 7009)
+# Allows clients to explicitly invalidate a refresh token (or access token) before expiration
+# @name revokeToken
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/revoke
+Content-Type: application/x-www-form-urlencoded
+
+token={{userPasswordToken.response.body.refresh_token}}&token_type_hint=refresh_token&client_id={{clientId}}&client_secret={{clientSecret}}
+
+### 11. End Session / Logout Endpoint (RP-Initiated Logout - RFC / OIDC)
+# Logs out the user session from Keycloak using refresh token or ID token
+# @name logout
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/logout
+Content-Type: application/x-www-form-urlencoded
+
+client_id={{clientId}}&client_secret={{clientSecret}}&refresh_token={{userPasswordToken.response.body.refresh_token}}

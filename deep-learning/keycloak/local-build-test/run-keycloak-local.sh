@@ -5,10 +5,13 @@
 # PostgreSQL container started by docker-compose as its database.
 # ------------------------------------------------------------
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # Ensure the Docker DB container is running
 if ! docker ps --filter "name=keycloak-db" --format "{{.Names}}" | grep -q "keycloak-db"; then
   echo "[INFO] PostgreSQL container not running – starting via docker compose..."
-  docker compose -f docker/docker-compose.yml up -d postgres
+  docker compose -f "$ROOT_DIR/docker/docker-compose.yml" up -d postgres
 fi
 
 # Wait for DB to become healthy (simple loop)
@@ -24,17 +27,19 @@ if [[ "$status" != "healthy" ]]; then
 fi
 
 # Directory for Keycloak distribution
-KC_DIR="keycloak-dist"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+KC_DIR="$SCRIPT_DIR/keycloak-dist"
 KC_VERSION="24.0.5"
 KC_URL="https://github.com/keycloak/keycloak/releases/download/${KC_VERSION}/keycloak-${KC_VERSION}.zip"
 
 # Download Keycloak if not present
 if [[ ! -d "$KC_DIR" ]]; then
   echo "[INFO] Downloading Keycloak ${KC_VERSION}..."
-  curl -L -o keycloak-${KC_VERSION}.zip "$KC_URL"
-  unzip -q keycloak-${KC_VERSION}.zip -d .
-  mv keycloak-${KC_VERSION} "$KC_DIR"
-  rm keycloak-${KC_VERSION}.zip
+  curl -L -o "$SCRIPT_DIR/keycloak-${KC_VERSION}.zip" "$KC_URL"
+  unzip -q "$SCRIPT_DIR/keycloak-${KC_VERSION}.zip" -d "$SCRIPT_DIR"
+  mv "$SCRIPT_DIR/keycloak-${KC_VERSION}" "$KC_DIR"
+  rm "$SCRIPT_DIR/keycloak-${KC_VERSION}.zip"
 fi
 
 # Export DB connection environment variables for dev mode
@@ -50,4 +55,4 @@ export KEYCLOAK_ADMIN_PASSWORD=admin
 
 # Start Keycloak in development mode (pass any additional CLI args like --debug)
 cd "$KC_DIR"
-./bin/kc.sh start-dev "$@"
+./bin/kc.sh start-dev --log-level=debug "$@"

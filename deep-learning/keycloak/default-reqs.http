@@ -1,0 +1,231 @@
+# ==========================================================
+# Variáveis Globais
+# ==========================================================
+@baseUrl = http://localhost:8080
+@realm = demo
+@clientId = my-client
+@clientSecret = my-secret
+
+### 1. Obter o Token de administração (nomeado "login")
+# @name login
+POST {{baseUrl}}/realms/master/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id=admin-cli&username=admin&password=admin
+
+### 2. Criar um realm de teste (demo) (nomeado "createRealm")
+# @name createRealm
+POST {{baseUrl}}/admin/realms
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "realm": "{{realm}}",
+  "enabled": true,
+  "displayName": "Realm de demonstração"
+}
+
+### 3. Criar um client confidencial (nomeado "createClient")
+# @name createClient
+POST {{baseUrl}}/admin/realms/{{realm}}/clients
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "clientId": "{{clientId}}",
+  "secret": "{{clientSecret}}",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "directAccessGrantsEnabled": true,
+  "standardFlowEnabled": true,
+  "serviceAccountsEnabled": true,
+  "redirectUris": [
+    "http://localhost:8080/callback",
+    "http://localhost:8080/*",
+    "https://oauth.pstmn.io/v1/callback"
+  ]
+}
+
+### 4. Ler o client (nomeado "getClient")
+# @name getClient
+GET {{createClient.response.headers.Location}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 5. Atualizar o client (nomeado "updateClient")
+# @name updateClient
+PUT {{baseUrl}}/admin/realms/{{realm}}/clients/{{getClient.response.body.id}}
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "clientId": "{{clientId}}",
+  "secret": "{{clientSecret}}",
+  "description": "Cliente de teste – atualizado via HTTP",
+  "enabled": true,
+  "protocol": "openid-connect",
+  "publicClient": false,
+  "directAccessGrantsEnabled": true,
+  "standardFlowEnabled": true,
+  "serviceAccountsEnabled": true,
+  "redirectUris": [
+    "http://localhost:8080/callback",
+    "http://localhost:8080/*",
+    "https://oauth.pstmn.io/v1/callback"
+  ]
+}
+
+### 6. Obter token para o client (nomeado "clientLogin")
+# @name clientLogin
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials&client_id={{clientId}}&client_secret={{clientSecret}}
+
+### 7. Refresh do token (nomeado "clientRefresh")
+# @name clientRefresh
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token&refresh_token={{clientLogin.response.body.refresh_token}}&client_id={{clientId}}&client_secret={{clientSecret}}
+
+### 8. Criar um client‑scope (nomeado "createScope")
+# @name createScope
+POST {{baseUrl}}/admin/realms/{{realm}}/client-scopes
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "name": "custom-scope",
+  "protocol": "openid-connect",
+  "attributes": {
+    "display.on.consent.screen": "true",
+    "consent.screen.text": "Escopo personalizado"
+  }
+}
+
+### 8.1 Obter detalhes do client-scope recém-criado (nomeado "getScope")
+# @name getScope
+GET {{createScope.response.headers.Location}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 9. Associar o scope como default ao client (nomeado "assignScope")
+# @name assignScope
+PUT {{baseUrl}}/admin/realms/{{realm}}/clients/{{getClient.response.body.id}}/default-client-scopes/{{getScope.response.body.id}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 10. Verificar default‑scopes ligados ao client (nomeado "listScopes")
+# @name listScopes
+GET {{baseUrl}}/admin/realms/{{realm}}/clients/{{getClient.response.body.id}}/default-client-scopes
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 11. Criar usuário (nomeado "createUser")
+# @name createUser
+POST {{baseUrl}}/admin/realms/{{realm}}/users
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "username": "john.doe",
+  "enabled": true,
+  "email": "john.doe@example.com",
+  "firstName": "John",
+  "lastName": "Doe",
+  "credentials": [{ "type": "password", "value": "s3cr3t", "temporary": false }]
+}
+
+### 11.1 Obter detalhes do usuário recém-criado (nomeado "getUser")
+# @name getUser
+GET {{createUser.response.headers.Location}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 12. Login do usuário (Password Grant) (nomeado "userLogin")
+# @name userLogin
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&username=john.doe&password=s3cr3t&client_id={{clientId}}&client_secret={{clientSecret}}
+
+### 13. Introspect token do usuário (nomeado "introspectUser")
+# @name introspectUser
+POST {{baseUrl}}/realms/{{realm}}/protocol/openid-connect/token/introspect
+Content-Type: application/x-www-form-urlencoded
+
+token={{userLogin.response.body.access_token}}&client_id={{clientId}}&client_secret={{clientSecret}}
+
+### 14. Criar realm role (nomeado "createRole")
+# @name createRole
+POST {{baseUrl}}/admin/realms/{{realm}}/roles
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{
+  "name": "editor",
+  "description": "Pode editar recursos"
+}
+
+### 14.1 Obter detalhes da realm role criada (nomeado "getRole")
+# @name getRole
+GET {{createRole.response.headers.Location}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 15. Atribuir role ao usuário (nomeado "assignRole")
+# @name assignRole
+POST {{baseUrl}}/admin/realms/{{realm}}/users/{{getUser.response.body.id}}/role-mappings/realm
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+[
+  {
+    "id": "{{getRole.response.body.id}}",
+    "name": "{{getRole.response.body.name}}"
+  }
+]
+
+### 16. Criar grupo (nomeado "createGroup")
+# @name createGroup
+POST {{baseUrl}}/admin/realms/{{realm}}/groups
+Authorization: Bearer {{login.response.body.access_token}}
+Content-Type: application/json
+
+{ "name": "team-alpha" }
+
+### 16.1 Obter detalhes do grupo recém-criado (nomeado "getGroup")
+# @name getGroup
+GET {{createGroup.response.headers.Location}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 17. Adicionar usuário ao grupo (nomeado "addUserToGroup")
+# @name addUserToGroup
+PUT {{baseUrl}}/admin/realms/{{realm}}/users/{{getUser.response.body.id}}/groups/{{getGroup.response.body.id}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 18. Verificar roles do usuário (nomeado "listUserRoles")
+# @name listUserRoles
+GET {{baseUrl}}/admin/realms/{{realm}}/users/{{getUser.response.body.id}}/role-mappings/realm
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 19. Limpeza – apagar client (nomeado "deleteClient")
+# @name deleteClient
+DELETE {{baseUrl}}/admin/realms/{{realm}}/clients/{{getClient.response.body.id}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 20. Limpeza – apagar client‑scope (nomeado "deleteScope")
+# @name deleteScope
+DELETE {{baseUrl}}/admin/realms/{{realm}}/client-scopes/{{getScope.response.body.id}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 21. Limpeza – apagar usuário (nomeado "deleteUser")
+# @name deleteUser
+DELETE {{baseUrl}}/admin/realms/{{realm}}/users/{{getUser.response.body.id}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 22. Limpeza – apagar grupo (nomeado "deleteGroup")
+# @name deleteGroup
+DELETE {{baseUrl}}/admin/realms/{{realm}}/groups/{{getGroup.response.body.id}}
+Authorization: Bearer {{login.response.body.access_token}}
+
+### 23. Limpeza – apagar realm (nomeado "deleteRealm")
+# @name deleteRealm
+DELETE {{baseUrl}}/admin/realms/{{realm}}
+Authorization: Bearer {{login.response.body.access_token}}
